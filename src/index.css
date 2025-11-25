@@ -1,0 +1,44 @@
+@import 'tailwindcss';
+:root {
+  --primary: #ff4da6;
+  --primary-hover: #e04494;
+  --text-dark: #000000;
+  --text-light: #ffffff;
+  --bg-light: #ffffff;
+  --bg-dark: #0a0a0a;
+}
+@theme {
+  --color-pink: #ff3dac;
+  --color-pink-light: #ff7fcf;
+  --color-pink-dark: #d82385;
+
+  --color-black: #0a0a0a;
+  --color-white: #ffffff;
+
+  --color-bg: var(--color-white);
+  --color-text: var(--color-black);
+}
+
+@layer base {
+  :root {
+    --theme-bg: var(--color-white);
+    --theme-text: var(--color-black);
+  }
+
+  .dark {
+    --theme-bg: var(--color-black);
+    --theme-text: var(--color-white);
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-xl font-semibold transition duration-200;
+  }
+  .btn-pink {
+    @apply btn bg-pink text-white hover:bg-pink-dark;
+  }
+  .btn-outline {
+    @apply btn border border-pink text-pink hover:bg-pink-light/20;
+  }
+}
