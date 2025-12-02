@@ -1,44 +1,39 @@
-@import 'tailwindcss';
+@import "tailwindcss";
+
+/* Custom styles */
 :root {
-  --primary: #ff4da6;
-  --primary-hover: #e04494;
-  --text-dark: #000000;
-  --text-light: #ffffff;
-  --bg-light: #ffffff;
-  --bg-dark: #0a0a0a;
-}
-@theme {
-  --color-pink: #ff3dac;
-  --color-pink-light: #ff7fcf;
-  --color-pink-dark: #d82385;
-
-  --color-black: #0a0a0a;
-  --color-white: #ffffff;
-
-  --color-bg: var(--color-white);
-  --color-text: var(--color-black);
+  --primary-color: #f97316;
+  --secondary-color: #0ea5e9;
+  --background-color: #f8fafc;
+  --text-color: #1e293b;
 }
 
-@layer base {
-  :root {
-    --theme-bg: var(--color-white);
-    --theme-text: var(--color-black);
-  }
-
-  .dark {
-    --theme-bg: var(--color-black);
-    --theme-text: var(--color-white);
-  }
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  overflow-x: hidden;
 }
 
-@layer components {
-  .btn {
-    @apply px-4 py-2 rounded-xl font-semibold transition duration-200;
-  }
-  .btn-pink {
-    @apply btn bg-pink text-white hover:bg-pink-dark;
-  }
-  .btn-outline {
-    @apply btn border border-pink text-pink hover:bg-pink-light/20;
-  }
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Smooth transitions */
+* {
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
