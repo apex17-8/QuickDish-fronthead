@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { Layout } from '../components/layout/layout';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Button } from '../components/ui/Button';
+import { Button } from '../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/Tabs';
 import { useAuth } from '../hooks/useAuth';
 import { UserService } from '../services/userService';

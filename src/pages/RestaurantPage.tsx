@@ -1,106 +1,68 @@
+// src/pages/dashboards/RestaurantPage.tsx
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import {
-  Star,
-  Clock,
-  MapPin,
-  Phone,
-  ChefHat,
-  Filter,
-  Search,
-  Plus,
-  Minus
+import { useParams, useNavigate } from 'react-router-dom';
+import { 
+  Building, Edit, Trash2, Package, Users, DollarSign, Star, 
+  MapPin, Phone, Menu, BarChart, Clock, TrendingUp, ChefHat, ShoppingBag 
 } from 'lucide-react';
 import { Layout } from '../components/layout/layout';
-import { Card, CardContent } from '../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Rating } from '../components/ui/rating';
-import { FoodCard } from '../components/food/FoodCard';
-import { RestaurantService } from '../services/restaurantService';
-import { useCart } from '../hooks/useCart';
-import type{ Restaurant, MenuItem, RestaurantMenuCategory } from '../types';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/Tabs';
+import { useAuth } from '../hooks/useAuth';
+import { RestaurantOwnerService } from '../services/restaurantOwnerService';
 import toast from 'react-hot-toast';
 
 export const RestaurantPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [categories, setCategories] = useState<RestaurantMenuCategory[]>([]);
-  const [activeCategory, setActiveCategory] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [restaurant, setRestaurant] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('overview');
   
-  const { addToCart, canAddFromRestaurant } = useCart();
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (id) {
-      fetchRestaurantData();
+      loadRestaurantData();
     }
   }, [id]);
 
-  const fetchRestaurantData = async () => {
+  const loadRestaurantData = async () => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      const restaurantId = parseInt(id!);
-      const [restaurantData, menuData, categoriesData] = await Promise.all([
-        RestaurantService.getRestaurantById(restaurantId),
-        RestaurantService.getRestaurantMenu(restaurantId),
-        RestaurantService.getRestaurantCategories(restaurantId),
-      ]);
-
+      const restaurantData = await RestaurantOwnerService.getRestaurantById(parseInt(id!));
       setRestaurant(restaurantData);
-      setMenuItems(menuData);
-      setCategories(categoriesData);
-    } catch (error) {
+    } catch (error: any) {
       toast.error('Failed to load restaurant data');
+      navigate('/dashboard/restaurant');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const filteredItems = menuItems.filter(item => {
-    const matchesCategory = activeCategory === 'all' || 
-      item.category?.category_id === parseInt(activeCategory);
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         item.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  const handleEditRestaurant = () => {
+    navigate(`/dashboard/restaurant/${id}/edit`);
+  };
 
-  const handleAddToCart = (item: MenuItem) => {
-    if (!canAddFromRestaurant(item)) {
-      toast.error(
-        'You can only order from one restaurant at a time. Clear your cart to order from a different restaurant.',
-        { duration: 5000 }
-      );
-      return;
+  const handleDeleteRestaurant = async () => {
+    if (window.confirm('Are you sure you want to delete this restaurant?')) {
+      try {
+        await RestaurantOwnerService.deleteRestaurant(parseInt(id!));
+        toast.success('Restaurant deleted successfully');
+        navigate('/dashboard/restaurant');
+      } catch (error: any) {
+        toast.error('Failed to delete restaurant');
+      }
     }
-
-    addToCart(item, 1);
-    toast.success(`${item.name} added to cart!`);
   };
 
   if (isLoading) {
     return (
       <Layout>
-        <div className="container mx-auto px-4 py-8">
-          <div className="max-w-6xl mx-auto">
-            <div className="h-64 bg-gray-200 animate-pulse rounded-2xl mb-8"></div>
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-              <div className="lg:col-span-3">
-                <div className="h-8 bg-gray-200 animate-pulse rounded-lg mb-6"></div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {[...Array(6)].map((_, i) => (
-                    <div key={i} className="h-80 bg-gray-200 animate-pulse rounded-xl"></div>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-6">
-                <div className="h-64 bg-gray-200 animate-pulse rounded-xl"></div>
-                <div className="h-48 bg-gray-200 animate-pulse rounded-xl"></div>
-              </div>
-            </div>
-          </div>
+        <div className="flex justify-center items-center min-h-screen">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
         </div>
       </Layout>
     );
@@ -110,257 +72,221 @@ export const RestaurantPage: React.FC = () => {
     return (
       <Layout>
         <div className="container mx-auto px-4 py-8">
-          <Card className="max-w-2xl mx-auto text-center p-8">
-            <ChefHat className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Restaurant Not Found</h2>
-            <p className="text-gray-600 mb-6">
-              The restaurant you're looking for doesn't exist or has been removed.
-            </p>
-            <Button variant="primary">Browse Restaurants</Button>
+          <Card className="text-center py-12">
+            <Building className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Restaurant Not Found</h3>
+            <Button onClick={() => navigate('/dashboard/restaurant')}>
+              Back to Restaurants
+            </Button>
           </Card>
         </div>
       </Layout>
     );
   }
 
+  const stats = [
+    { label: 'Today Orders', value: '24', icon: ShoppingBag, change: '+12%', color: 'bg-blue-500' },
+    { label: 'Revenue', value: 'KES 12,450', icon: DollarSign, change: '+18%', color: 'bg-green-500' },
+    { label: 'Pending Orders', value: '8', icon: Clock, change: '+5%', color: 'bg-yellow-500' },
+    { label: 'Rating', value: restaurant.rating?.toFixed(1) || 'N/A', icon: Star, color: 'bg-purple-500' },
+  ];
+
   return (
     <Layout>
-      {/* Restaurant Header */}
-      <div className="bg-gradient-to-r from-orange-500 to-orange-600">
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex flex-col md:flex-row items-start md:items-center">
-            {/* Restaurant Logo */}
-            <div className="w-24 h-24 rounded-xl bg-white p-2 shadow-lg mb-4 md:mb-0 md:mr-8">
-              {restaurant.logo_url ? (
-                <img
-                  src={restaurant.logo_url}
-                  alt={restaurant.name}
-                  className="w-full h-full object-contain"
-                />
-              ) : (
-                <div className="w-full h-full bg-orange-100 rounded-lg flex items-center justify-center">
-                  <ChefHat className="w-12 h-12 text-orange-600" />
-                </div>
-              )}
-            </div>
-
-            {/* Restaurant Info */}
-            <div className="flex-1 text-white">
-              <h1 className="text-3xl font-bold mb-2">{restaurant.name}</h1>
-              <div className="flex flex-wrap items-center gap-4 mb-4">
-                <div className="flex items-center">
-                  <Rating rating={restaurant.rating || 4.5} showNumber />
-                  <span className="ml-2">({Math.floor(Math.random() * 1000)} reviews)</span>
-                </div>
-                <div className="flex items-center">
-                  <Clock className="w-4 h-4 mr-1" />
-                  <span>30-45 min • KSh 100 delivery fee</span>
-                </div>
-                <Badge variant={restaurant.isOpen ? 'success' : 'danger'}>
-                  {restaurant.isOpen ? 'OPEN NOW' : 'CLOSED'}
-                </Badge>
-              </div>
-              <div className="flex flex-wrap items-center gap-4 text-sm">
-                <div className="flex items-center">
-                  <MapPin className="w-4 h-4 mr-1" />
-                  <span>{restaurant.address}</span>
-                </div>
-                <div className="flex items-center">
-                  <Phone className="w-4 h-4 mr-1" />
-                  <span>{restaurant.phone}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="container mx-auto px-4 py-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            {/* Main Content */}
-            <div className="lg:col-span-3">
-              {/* Search and Filter */}
-              <div className="mb-8">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                    <input
-                      type="text"
-                      placeholder="Search menu items..."
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex items-center">
-                    <Filter className="w-5 h-5 text-gray-500 mr-2" />
-                    <select
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      value={activeCategory}
-                      onChange={(e) => setActiveCategory(e.target.value)}
-                    >
-                      <option value="all">All Categories</option>
-                      {categories.map((category) => (
-                        <option key={category.category_id} value={category.category_id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+        {/* Restaurant Header */}
+        <div className="mb-8">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+            <div>
+              <div className="flex items-center space-x-4">
+                <div className="w-16 h-16 rounded-lg bg-gray-200 flex items-center justify-center">
+                  {restaurant.logo_url ? (
+                    <img src={restaurant.logo_url} alt={restaurant.name} className="w-full h-full object-cover rounded-lg" />
+                  ) : (
+                    <Building className="w-8 h-8 text-gray-400" />
+                  )}
                 </div>
-
-                {/* Category Tabs */}
-                <div className="flex overflow-x-auto pb-2 -mx-4 px-4">
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => setActiveCategory('all')}
-                      className={`px-4 py-2 rounded-lg whitespace-nowrap ${
-                        activeCategory === 'all'
-                          ? 'bg-orange-500 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      All Items
-                    </button>
-                    {categories.map((category) => (
-                      <button
-                        key={category.category_id}
-                        onClick={() => setActiveCategory(category.category_id.toString())}
-                        className={`px-4 py-2 rounded-lg whitespace-nowrap ${
-                          activeCategory === category.category_id.toString()
-                            ? 'bg-orange-500 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                      >
-                        {category.name}
-                      </button>
-                    ))}
+                <div>
+                  <h1 className="text-3xl font-bold text-gray-900">{restaurant.name}</h1>
+                  <div className="flex items-center space-x-2 mt-2">
+                    <Badge variant={restaurant.is_active ? 'success' : 'danger'}>
+                      {restaurant.is_active ? 'Active' : 'Inactive'}
+                    </Badge>
+                    <span className="text-gray-600">{restaurant.cuisine || 'Various Cuisine'}</span>
                   </div>
                 </div>
               </div>
-
-              {/* Menu Items Grid */}
-              {filteredItems.length === 0 ? (
-                <Card className="text-center p-8">
-                  <Search className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">No Items Found</h3>
-                  <p className="text-gray-600">
-                    {searchQuery
-                      ? `No items matching "${searchQuery}"`
-                      : 'No items in this category'}
-                  </p>
-                </Card>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredItems.map((item) => (
-                    <Card key={item.menu_item_id} hoverable>
-                      <div className="aspect-square overflow-hidden rounded-t-xl">
-                        {item.image_url ? (
-                          <img
-                            src={item.image_url}
-                            alt={item.name}
-                            className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                            <ChefHat className="w-12 h-12 text-gray-400" />
-                          </div>
-                        )}
-                      </div>
-                      <CardContent className="p-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{item.name}</h3>
-                            <p className="text-sm text-gray-500">{item.category?.name}</p>
-                          </div>
-                          <span className="font-bold text-gray-900">KSh {item.price}</span>
-                        </div>
-                        <p className="text-sm text-gray-600 line-clamp-2 mb-3">
-                          {item.description}
-                        </p>
-                        <div className="flex items-center justify-between">
-                          <Rating rating={4.5} size="sm" />
-                          <div className="flex items-center text-sm text-gray-500">
-                            <Clock className="w-4 h-4 mr-1" />
-                            <span>{item.preparation_time} min</span>
-                          </div>
-                        </div>
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          fullWidth
-                          className="mt-4"
-                          leftIcon={<Plus className="w-4 h-4" />}
-                          onClick={() => handleAddToCart(item)}
-                        >
-                          Add to Cart
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+            </div>
+            <div className="flex space-x-3 mt-4 md:mt-0">
+              {user?.role === 'restaurant_owner' && (
+                <>
+                  <Button variant="outline" onClick={handleEditRestaurant}>
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit Restaurant
+                  </Button>
+                  <Button variant="outline" className="text-red-600" onClick={handleDeleteRestaurant}>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </Button>
+                </>
               )}
             </div>
+          </div>
 
-            {/* Sidebar */}
-            <div className="space-y-6">
-              {/* Restaurant Details */}
-              <Card>
-                <CardContent className="p-6">
-                  <h3 className="font-bold text-lg text-gray-900 mb-4">Restaurant Details</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-sm text-gray-600">Opening Hours</p>
-                      <p className="font-medium">8:00 AM - 11:00 PM</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Delivery Area</p>
-                      <p className="font-medium">Within 10km radius</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Minimum Order</p>
-                      <p className="font-medium">KSh 300</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Popular Items */}
-              <Card>
-                <CardContent className="p-6">
-                  <h3 className="font-bold text-lg text-gray-900 mb-4">Popular Items</h3>
-                  <div className="space-y-4">
-                    {menuItems.slice(0, 3).map((item) => (
-                      <div key={item.menu_item_id} className="flex items-center">
-                        <div className="w-12 h-12 rounded-lg bg-gray-100 mr-3 overflow-hidden">
-                          {item.image_url && (
-                            <img
-                              src={item.image_url}
-                              alt={item.name}
-                              className="w-full h-full object-cover"
-                            />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-sm">{item.name}</p>
-                          <p className="text-xs text-gray-500">KSh {item.price}</p>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleAddToCart(item)}
-                        >
-                          <Plus className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex items-center text-gray-600">
+              <MapPin className="w-4 h-4 mr-2" />
+              <span>{restaurant.address}</span>
+            </div>
+            <div className="flex items-center text-gray-600">
+              <Phone className="w-4 h-4 mr-2" />
+              <span>{restaurant.phone}</span>
+            </div>
+            <div className="flex items-center text-gray-600">
+              <Star className="w-4 h-4 mr-2 text-yellow-500" />
+              <span>Rating: {restaurant.rating?.toFixed(1) || 'N/A'}</span>
             </div>
           </div>
         </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {stats.map((stat, index) => (
+            <Card key={index}>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">{stat.label}</p>
+                    <p className="text-2xl font-bold mt-2">{stat.value}</p>
+                    {stat.change && (
+                      <p className="text-sm text-green-600 mt-1">{stat.change} from yesterday</p>
+                    )}
+                  </div>
+                  <div className={`${stat.color} p-3 rounded-lg`}>
+                    <stat.icon className="w-6 h-6 text-white" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="mb-6">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="menu">Menu</TabsTrigger>
+            <TabsTrigger value="staff">Staff</TabsTrigger>
+            <TabsTrigger value="orders">Orders</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Recent Activity</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="font-medium">New order received</p>
+                        <p className="text-sm text-gray-600">Order #1234 - KES 1,250</p>
+                        <p className="text-xs text-gray-500 mt-1">2 hours ago</p>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="font-medium">Menu item added</p>
+                        <p className="text-sm text-gray-600">Added "Chicken Burger" to menu</p>
+                        <p className="text-xs text-gray-500 mt-1">5 hours ago</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+              <div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Quick Actions</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Button variant="outline" fullWidth onClick={() => navigate(`/dashboard/restaurant/${id}/menu`)}>
+                      <Menu className="w-4 h-4 mr-2" />
+                      Manage Menu
+                    </Button>
+                    <Button variant="outline" fullWidth onClick={() => navigate(`/dashboard/restaurant/${id}/staff`)}>
+                      <Users className="w-4 h-4 mr-2" />
+                      Manage Staff
+                    </Button>
+                    <Button variant="outline" fullWidth onClick={() => navigate(`/dashboard/orders?restaurant=${id}`)}>
+                      <Package className="w-4 h-4 mr-2" />
+                      View Orders
+                    </Button>
+                    <Button variant="outline" fullWidth onClick={() => navigate(`/dashboard/analytics?restaurant=${id}`)}>
+                      <BarChart className="w-4 h-4 mr-2" />
+                      View Analytics
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="menu">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Menu Management</CardTitle>
+                <Button onClick={() => navigate(`/dashboard/restaurant/${id}/menu`)}>
+                  <ChefHat className="w-4 h-4 mr-2" />
+                  Manage Full Menu
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <p>Full menu management page coming soon.</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="staff">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Staff Management</CardTitle>
+                <Button onClick={() => navigate(`/dashboard/restaurant/${id}/staff`)}>
+                  <Users className="w-4 h-4 mr-2" />
+                  Manage Staff
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <p>Staff management page coming soon.</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="orders">
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent Orders</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p>Order management page coming soon.</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="analytics">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <TrendingUp className="w-5 h-5 mr-2" />
+                  Analytics
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p>Analytics dashboard coming soon.</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </Layout>
   );

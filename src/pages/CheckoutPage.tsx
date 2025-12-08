@@ -1,21 +1,34 @@
-import React, { useState } from 'react';
+// src/pages/CheckoutPage.tsx - UPDATED
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, CreditCard, Shield } from 'lucide-react';
+import { MapPin, CreditCard, Shield, Loader, AlertCircle } from 'lucide-react';
 import { Layout } from '../components/layout/layout';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { CartSummary } from '../components/cart/CartSummary';
 import { useCart } from '../hooks/useCart';
+import { useAuth } from '../hooks/useAuth';
+import { useOrderWorkflow } from '../hooks/useOrderWorkflow';
+import { CustomerService } from '../services/customerService';
 import toast from 'react-hot-toast';
 
 export const CheckoutPage: React.FC = () => {
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [instructions, setInstructions] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('card');
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   
-  const { items, total, clearCart } = useCart();
+  const { items, total, clearCart, restaurantId, restaurantName } = useCart();
+  const { user, customer, refreshUserData } = useAuth();
+  const { placeOrder, isPlacingOrder } = useOrderWorkflow();
   const navigate = useNavigate();
+
+  // Load customer's default address
+  useEffect(() => {
+    if (customer?.default_address) {
+      setDeliveryAddress(customer.default_address);
+    }
+  }, [customer]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,18 +43,59 @@ export const CheckoutPage: React.FC = () => {
       return;
     }
 
-    setIsProcessing(true);
+    if (!user) {
+      toast.error('Please login to continue');
+      navigate('/login');
+      return;
+    }
+
+    setIsLoading(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Update customer's default address if needed
+      if (customer && deliveryAddress !== customer.default_address) {
+        await CustomerService.setDefaultAddress(customer.customer_id, deliveryAddress);
+        await refreshUserData();
+      }
+
+      // Prepare order data
+      const orderData = {
+        restaurantId,
+        restaurantName,
+        deliveryAddress,
+        specialInstructions: instructions,
+        items: items.map(item => ({
+          menu_item: item.menu_item,
+          quantity: item.quantity,
+          specialInstructions: item.specialInstructions,
+        })),
+        total: total,
+        customerId: customer?.customer_id,
+      };
+
+      // Place order using workflow hook
+      const order = await placeOrder(orderData, paymentMethod);
       
-      toast.success('Order placed successfully!');
-      clearCart();
-      navigate('/orders');
-    } catch (error) {
-      toast.error('Failed to place order');
+      if (order) {
+        // Show success message
+        toast.success(`Order #${order.order_number} placed successfully!`, {
+          duration: 5000,
+        });
+        
+        // Clear cart
+        clearCart();
+        
+        // Redirect based on payment method
+        if (paymentMethod === 'cash') {
+          navigate(`/orders/${order.order_id}`);
+        } else {
+          // For online payments, show payment status
+          navigate(`/orders/${order.order_id}/payment`);
+        }
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to place order');
     } finally {
-      setIsProcessing(false);
+      setIsLoading(false);
     }
   };
 
@@ -66,10 +120,22 @@ export const CheckoutPage: React.FC = () => {
                   <textarea
                     value={deliveryAddress}
                     onChange={(e) => setDeliveryAddress(e.target.value)}
-                    placeholder="Enter your full delivery address"
+                    placeholder="Enter your full delivery address (street, building, floor, apartment)"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 min-h-[100px]"
                     required
                   />
+                  {customer?.default_address && (
+                    <div className="mt-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDeliveryAddress(customer.default_address)}
+                      >
+                        Use default address
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -82,9 +148,13 @@ export const CheckoutPage: React.FC = () => {
                   <textarea
                     value={instructions}
                     onChange={(e) => setInstructions(e.target.value)}
-                    placeholder="Any special instructions for delivery? (e.g., leave at door, call before delivery)"
+                    placeholder="Any special instructions for delivery? (e.g., leave at door, call before delivery, gate code, etc.)"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 min-h-[80px]"
                   />
+                  <div className="mt-2 text-sm text-gray-500">
+                    <AlertCircle className="w-4 h-4 inline mr-1" />
+                    Please provide specific details for easier delivery
+                  </div>
                 </CardContent>
               </Card>
 
@@ -98,7 +168,7 @@ export const CheckoutPage: React.FC = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <label className="flex items-center p-4 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
+                    <label className="flex items-center p-4 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
                       <input
                         type="radio"
                         name="payment"
@@ -109,11 +179,11 @@ export const CheckoutPage: React.FC = () => {
                       />
                       <div className="ml-3">
                         <span className="font-medium">Credit/Debit Card</span>
-                        <p className="text-sm text-gray-500">Pay with your card</p>
+                        <p className="text-sm text-gray-500">Pay with your card (Visa, MasterCard)</p>
                       </div>
                     </label>
 
-                    <label className="flex items-center p-4 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
+                    <label className="flex items-center p-4 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
                       <input
                         type="radio"
                         name="payment"
@@ -124,11 +194,11 @@ export const CheckoutPage: React.FC = () => {
                       />
                       <div className="ml-3">
                         <span className="font-medium">Mobile Money</span>
-                        <p className="text-sm text-gray-500">M-Pesa, Airtel Money, etc.</p>
+                        <p className="text-sm text-gray-500">M-Pesa, Airtel Money, T-Kash</p>
                       </div>
                     </label>
 
-                    <label className="flex items-center p-4 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
+                    <label className="flex items-center p-4 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
                       <input
                         type="radio"
                         name="payment"
@@ -149,7 +219,7 @@ export const CheckoutPage: React.FC = () => {
 
             {/* Right Column - Summary */}
             <div>
-              <CartSummary onCheckout={() => {}} isLoading={isProcessing} />
+              <CartSummary onCheckout={() => {}} isLoading={isLoading || isPlacingOrder} />
               
               {/* Security Badge */}
               <Card className="mt-6">
@@ -163,6 +233,29 @@ export const CheckoutPage: React.FC = () => {
                   </p>
                 </CardContent>
               </Card>
+
+              {/* Order Information */}
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle>Order Information</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Restaurant:</span>
+                      <span className="font-medium">{restaurantName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Items:</span>
+                      <span className="font-medium">{items.length} items</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Estimated Delivery:</span>
+                      <span className="font-medium">30-45 minutes</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </div>
 
@@ -173,11 +266,19 @@ export const CheckoutPage: React.FC = () => {
               variant="primary"
               size="lg"
               fullWidth
-              isLoading={isProcessing}
-              disabled={isProcessing || items.length === 0}
+              isLoading={isLoading || isPlacingOrder}
+              disabled={isLoading || isPlacingOrder || items.length === 0}
+              leftIcon={isLoading || isPlacingOrder ? <Loader className="w-5 h-5 animate-spin" /> : undefined}
             >
-              Place Order - KSh {total.toFixed(2)}
+              {isLoading || isPlacingOrder 
+                ? 'Processing Order...' 
+                : `Place Order - KSh ${total.toFixed(2)}`
+              }
             </Button>
+            
+            <p className="text-sm text-gray-500 text-center mt-4">
+              By placing your order, you agree to our Terms of Service
+            </p>
           </div>
         </form>
       </div>

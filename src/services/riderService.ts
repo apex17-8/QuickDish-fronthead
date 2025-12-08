@@ -1,79 +1,121 @@
+// src/services/riderService.ts
 import api from './api';
-import type{ Rider, RiderLocation } from '../types';
 
-export const riderService = {
-  // Riders
-  getAllRiders: async (): Promise<Rider[]> => {
-    const response = await api.get<Rider[]>('/riders');
+export const RiderService = {
+  // Get rider details
+  getRiderDetails: async (riderId: number): Promise<any> => {
+    const response = await api.get(`/riders/${riderId}`);
     return response.data;
   },
 
-  getRiderById: async (id: number): Promise<Rider> => {
-    const response = await api.get<Rider>(`/riders/${id}`);
-    return response.data;
-  },
-
-  updateRiderStatus: async (riderId: number, isOnline: boolean): Promise<Rider> => {
+  // Update rider status
+  updateRiderStatus: async (riderId: number, isOnline: boolean): Promise<any> => {
     const endpoint = isOnline ? 'go-online' : 'go-offline';
-    const response = await api.patch<Rider>(`/riders/${riderId}/${endpoint}`);
+    const response = await api.patch(`/riders/${riderId}/${endpoint}`);
     return response.data;
   },
 
-  updateRiderLocation: async (riderId: number, latitude: number, longitude: number): Promise<Rider> => {
-    const response = await api.patch<Rider>(`/riders/${riderId}/update-location`, {
-      latitude,
-      longitude,
+  // Update rider location
+  updateLocation: async (riderId: number, lat: number, lng: number): Promise<any> => {
+    const response = await api.patch(`/riders/${riderId}/update-location`, {
+      latitude: lat,
+      longitude: lng,
     });
     return response.data;
   },
 
-  getAvailableRiders: async (): Promise<Rider[]> => {
-    const response = await api.get<Rider[]>('/riders/available');
+  // Get rider orders
+  getRiderOrders: async (riderId: number): Promise<any[]> => {
+    const response = await api.get(`/orders/rider/${riderId}`);
     return response.data;
   },
 
-  getRiderLocationHistory: async (riderId: number): Promise<RiderLocation[]> => {
-    const response = await api.get<RiderLocation[]>(`/rider-location/${riderId}/history`);
+  // Get available orders
+  getAvailableOrders: async (): Promise<any[]> => {
+    const response = await api.get('/orders/ready');
     return response.data;
   },
 
-  getRiderLiveLocation: async (riderId: number): Promise<RiderLocation> => {
-    const response = await api.get<RiderLocation>(`/rider-location/${riderId}/live`);
+  // Accept order
+  acceptOrder: async (orderId: number, riderId: number): Promise<any> => {
+    const response = await api.patch(`/orders/${orderId}/assign-rider`, {
+      rider_id: riderId,
+    });
     return response.data;
   },
 
-  // Rider Stats
+  // Update order status
+  updateOrderStatus: async (orderId: number, status: string): Promise<any> => {
+    const response = await api.patch(`/orders/${orderId}/status`, { status });
+    return response.data;
+  },
+
+  // Confirm delivery
+  confirmDelivery: async (orderId: number): Promise<any> => {
+    const response = await api.patch(`/orders/${orderId}/confirm-rider`);
+    return response.data;
+  },
+
+  // Get rider earnings
+  getRiderEarnings: async (riderId: number, range: string = 'month'): Promise<any> => {
+    const response = await api.get(`/riders/${riderId}/earnings?range=${range}`);
+    return response.data;
+  },
+
+  // Get rider payments
+  getRiderPayments: async (riderId: number): Promise<any[]> => {
+    const response = await api.get(`/payments/user/${riderId}`);
+    return response.data;
+  },
+
+  // Request withdrawal
+  requestWithdrawal: async (riderId: number, amount: number, method: string): Promise<any> => {
+    const response = await api.post('/withdrawals/request', {
+      riderId,
+      amount,
+      method,
+    });
+    return response.data;
+  },
+
+  // Get rider performance
+  getRiderPerformance: async (riderId: number): Promise<any> => {
+    const response = await api.get(`/riders/${riderId}/performance`);
+    return response.data;
+  },
+
+  // Get rider statistics
   getRiderStats: async (riderId: number): Promise<any> => {
     const response = await api.get(`/riders/${riderId}/stats`);
     return response.data;
   },
 
-  getRiderEarnings: async (riderId: number, period: 'day' | 'week' | 'month' = 'month'): Promise<any> => {
-    const response = await api.get(`/riders/${riderId}/earnings?period=${period}`);
+  // Send message to customer
+  sendMessage: async (orderId: number, riderId: number, message: string): Promise<any> => {
+    const response = await api.post('/messages', {
+      orderId,
+      senderId: riderId,
+      senderType: 'rider',
+      content: message,
+    });
     return response.data;
   },
 
-  // Assignment
-  getAssignedOrders: async (riderId: number): Promise<any[]> => {
-    const response = await api.get(`/riders/${riderId}/assigned-orders`);
+  // Get order chat messages
+  getOrderMessages: async (orderId: number): Promise<any[]> => {
+    const response = await api.get(`/messages/${orderId}`);
     return response.data;
   },
 
-  acceptOrder: async (riderId: number, orderId: number): Promise<void> => {
-    await api.post(`/riders/${riderId}/accept-order`, { orderId });
-  },
-
-  rejectOrder: async (riderId: number, orderId: number): Promise<void> => {
-    await api.post(`/riders/${riderId}/reject-order`, { orderId });
-  },
-
-  // Reviews
-  getRiderReviews: async (riderId: number): Promise<any[]> => {
-    const response = await api.get(`/riders/${riderId}/reviews`);
+  // Get rider schedule
+  getRiderSchedule: async (riderId: number): Promise<any> => {
+    const response = await api.get(`/riders/${riderId}/schedule`);
     return response.data;
   },
 
-  submitRiderReview: async (riderId: number, rating: number, comment: string): Promise<void> => {
-    await api.post(`/riders/${riderId}/reviews`, { rating, comment });
+  // Update rider schedule
+  updateRiderSchedule: async (riderId: number, schedule: any): Promise<any> => {
+    const response = await api.patch(`/riders/${riderId}/schedule`, schedule);
+    return response.data;
   },
 };

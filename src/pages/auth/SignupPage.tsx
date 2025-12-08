@@ -1,3 +1,4 @@
+// src/pages/auth/SignupPage.tsx
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { User, Mail, Lock, Phone, Eye, EyeOff } from 'lucide-react';
@@ -12,7 +13,7 @@ export const SignupPage: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    phone: '',
+    phone: '', // Phone field added
     password: '',
     confirmPassword: '',
     role: UserRole.Customer,
@@ -34,9 +35,16 @@ export const SignupPage: React.FC = () => {
     
     const { name, email, phone, password, confirmPassword, role } = formData;
 
-    // Validation
+    // Validation - INCLUDING PHONE
     if (!name || !email || !phone || !password || !confirmPassword) {
       toast.error('Please fill in all fields');
+      return;
+    }
+
+    // Phone validation
+    const phoneRegex = /^(\+)?[\d\s\-()]{10,}$/;
+    if (!phoneRegex.test(phone.replace(/\s+/g, ''))) {
+      toast.error('Please enter a valid phone number (e.g., +254700000000 or 0700000000)');
       return;
     }
 
@@ -52,6 +60,7 @@ export const SignupPage: React.FC = () => {
 
     setIsLoading(true);
     try {
+      // Send all data including phone
       const result = await signup({ name, email, phone, password, role });
       if (result.success) {
         toast.success('Account created successfully!');
@@ -77,6 +86,7 @@ export const SignupPage: React.FC = () => {
 
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Name Field */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Full Name
@@ -95,6 +105,7 @@ export const SignupPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Email Field */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Email Address
@@ -113,9 +124,10 @@ export const SignupPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Phone Field - ADDED */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone Number
+                  Phone Number *
                 </label>
                 <div className="relative">
                   <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -129,8 +141,12 @@ export const SignupPage: React.FC = () => {
                     required
                   />
                 </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Required for order notifications and delivery
+                </p>
               </div>
 
+              {/* Role Field */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Account Type
@@ -147,6 +163,7 @@ export const SignupPage: React.FC = () => {
                 </select>
               </div>
 
+              {/* Password Field */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Password
@@ -176,6 +193,7 @@ export const SignupPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Confirm Password Field */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Confirm Password
@@ -205,6 +223,7 @@ export const SignupPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Terms Agreement */}
               <div className="flex items-center">
                 <input
                   type="checkbox"

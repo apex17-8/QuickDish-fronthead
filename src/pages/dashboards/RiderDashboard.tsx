@@ -1,393 +1,578 @@
+// src/pages/dashboards/RiderDashboard.tsx
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
-  Navigation, 
-  Package, 
-  Clock, 
-  CheckCircle, 
-  DollarSign,
-  TrendingUp,
-  MapPin,
-  Battery,
-  Wifi,
-  User,
-  AlertCircle,
-  PlayCircle,
-  PauseCircle
+  Truck, Package, MapPin, DollarSign, Clock, 
+  CheckCircle, AlertCircle, MessageSquare, 
+  User, Settings, Bell, LogOut, ChevronRight,
+  TrendingUp, BarChart, Calendar, Shield
 } from 'lucide-react';
 import { Layout } from '../../components/layout/layout';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { OrdersService } from '../../services/ordersService';
-import { riderService } from '../../services/riderService';
-import { useWebSocket } from '../../hooks/useWebsockets';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/Tabs';
+import { useAuth } from '../../hooks/useAuth';
+import api from '../../services/api';
 import toast from 'react-hot-toast';
-
+import {RiderEarningsTab} from '../../pages/dashboards/RiderEarningsTab';
+import {RiderChatTab} from '../../pages/dashboards/RiderChatTab';
 export const RiderDashboard: React.FC = () => {
-  const [isOnline, setIsOnline] = useState(false);
-  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [assignedOrders, setAssignedOrders] = useState<any[]>([]);
-  const [completedOrders, setCompletedOrders] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('overview');
   const [stats, setStats] = useState({
-    todayEarnings: 0,
-    completedToday: 0,
-    averageRating: 0,
-    activeHours: 0,
+    totalDeliveries: 0,
+    todayDeliveries: 0,
+    pendingDeliveries: 0,
+    earnings: 0,
+    rating: 0,
+    onlineHours: 0,
   });
-  const [isLoading, setIsLoading] = useState(false);
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [availableOrders, setAvailableOrders] = useState<any[]>([]);
+  const [currentOrder, setCurrentOrder] = useState<any>(null);
+  const [isOnline, setIsOnline] = useState(false);
+  const [location, setLocation] = useState<{lat: number, lng: number} | null>(null);
   
-  const { updateRiderLocation, isConnected } = useWebSocket();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    fetchRiderData();
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
+    if (user?.role !== 'rider') {
+      navigate('/dashboard');
+      return;
+    }
+    
+    loadDashboardData();
+    setupWebSocket();
+    startLocationTracking();
+    
+    // Cleanup
+    return () => {
+      // Disconnect WebSocket
+    };
+  }, [user]);
+
+  const loadDashboardData = async () => {
+    setIsLoading(true);
+    try {
+      const [ordersResponse, statsResponse, earningsResponse] = await Promise.all([
+        api.get(`/orders/rider/${user?.user_id}`),
+        api.get(`/riders/${user?.user_id}/stats`),
+        api.get(`/payments/user/${user?.user_id}`),
+      ]);
+
+      setRecentOrders(ordersResponse.data);
+      
+      // Get available orders
+      try {
+        const available = await api.get('/orders/ready');
+        setAvailableOrders(available.data);
+      } catch (error) {
+        console.log('No available orders');
+      }
+
+      // Calculate stats
+      const orders = ordersResponse.data;
+      const earnings = earningsResponse.data;
+      
+      const today = new Date().toDateString();
+      const todayOrders = orders.filter((order: any) => 
+        new Date(order.created_at).toDateString() === today
+      );
+
+      const pendingOrders = orders.filter((order: any) => 
+        ['accepted', 'preparing', 'ready', 'on_the_way'].includes(order.status)
+      );
+
+      const totalEarnings = earnings
+        .filter((payment: any) => payment.status === 'COMPLETED')
+        .reduce((sum: number, payment: any) => sum + payment.amount, 0);
+
+      setStats({
+        totalDeliveries: orders.length,
+        todayDeliveries: todayOrders.length,
+        pendingDeliveries: pendingOrders.length,
+        earnings: totalEarnings,
+        rating: statsResponse.data?.rating || 0,
+        onlineHours: statsResponse.data?.onlineHours || 0,
+      });
+
+    } catch (error) {
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const setupWebSocket = () => {
+    // Setup WebSocket connection for real-time updates
+    if (!user) return;
+
+    const ws = new WebSocket(`ws://localhost:3000/ws?riderId=${user.user_id}`);
+    
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+      setIsOnline(true);
+    };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      handleWebSocketMessage(data);
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected');
+      setIsOnline(false);
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+  };
+
+  const startLocationTracking = () => {
+    if ('geolocation' in navigator) {
+      navigator.geolocation.watchPosition(
         (position) => {
           const { latitude, longitude } = position.coords;
-          setCurrentLocation({ lat: latitude, lng: longitude });
+          setLocation({ lat: latitude, lng: longitude });
+          
+          // Send location to server
+          updateLocation(latitude, longitude);
         },
         (error) => {
-          console.error('Error getting location:', error);
-          toast.error('Failed to get location');
+          console.error('Geolocation error:', error);
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 5000,
         }
       );
     }
-  }, []);
+  };
 
-  const fetchRiderData = async () => {
+  const updateLocation = async (lat: number, lng: number) => {
     try {
-      setIsLoading(true);
-      // Replace with actual rider ID
-      const riderId = 1;
-      const [orders, riderStats] = await Promise.all([
-        riderService.getAssignedOrders(riderId),
-        riderService.getRiderStats(riderId),
-      ]);
-
-      setAssignedOrders(orders.filter((o: any) => o.status !== 'delivered'));
-      setCompletedOrders(orders.filter((o: any) => o.status === 'delivered').slice(0, 5));
-      setStats(riderStats);
+      await api.patch(`/riders/${user?.user_id}/update-location`, {
+        latitude: lat,
+        longitude: lng,
+      });
     } catch (error) {
-      toast.error('Failed to load rider data');
-    } finally {
-      setIsLoading(false);
+      console.error('Failed to update location:', error);
     }
   };
 
-  const handleToggleOnline = async () => {
-    try {
-      setIsLoading(true);
-      // Replace with actual rider ID
-      const riderId = 1;
-      const updatedRider = await riderService.updateRiderStatus(riderId, !isOnline);
-      setIsOnline(updatedRider.is_online);
+  const handleWebSocketMessage = (data: any) => {
+    switch (data.type) {
+      case 'newOrder':
+        toast.success('New order available!');
+        loadDashboardData(); // Refresh data
+        break;
       
-      if (updatedRider.is_online && currentLocation) {
-        await riderService.updateRiderLocation(
-          riderId,
-          currentLocation.lat,
-          currentLocation.lng
-        );
-        toast.success('You are now online!');
-      } else {
+      case 'orderAssigned':
+        toast.success(`You've been assigned to order #${data.orderId}`);
+        setCurrentOrder(data.order);
+        loadDashboardData();
+        break;
+      
+      case 'orderUpdated':
+        toast.info(`Order #${data.orderId} status updated: ${data.status}`);
+        loadDashboardData();
+        break;
+      
+      case 'chatMessage':
+        toast.info(`New message from ${data.sender}`);
+        break;
+    }
+  };
+
+  const toggleOnlineStatus = async () => {
+    try {
+      if (isOnline) {
+        await api.patch(`/riders/${user?.user_id}/go-offline`);
+        setIsOnline(false);
         toast.success('You are now offline');
+      } else {
+        await api.patch(`/riders/${user?.user_id}/go-online`);
+        setIsOnline(true);
+        toast.success('You are now online');
       }
     } catch (error) {
       toast.error('Failed to update status');
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  const handleAcceptOrder = async (orderId: number) => {
+  const acceptOrder = async (orderId: number) => {
     try {
-      // Replace with actual rider ID
-      const riderId = 1;
-      await riderService.acceptOrder(riderId, orderId);
-      toast.success('Order accepted');
-      fetchRiderData();
+      await api.patch(`/orders/${orderId}/assign-rider`, {
+        rider_id: user?.user_id,
+      });
+      toast.success('Order accepted!');
+      loadDashboardData();
     } catch (error) {
       toast.error('Failed to accept order');
     }
   };
 
-  const handleRejectOrder = async (orderId: number) => {
+  const updateOrderStatus = async (orderId: number, status: string) => {
     try {
-      // Replace with actual rider ID
-      const riderId = 1;
-      await riderService.rejectOrder(riderId, orderId);
-      toast.success('Order rejected');
-      fetchRiderData();
+      await api.patch(`/orders/${orderId}/status`, { status });
+      toast.success('Order status updated');
+      loadDashboardData();
     } catch (error) {
-      toast.error('Failed to reject order');
+      toast.error('Failed to update order status');
     }
   };
 
-  const statsCards = [
-    {
-      title: 'Today\'s Earnings',
-      value: `KSh ${stats.todayEarnings.toLocaleString()}`,
-      icon: <DollarSign className="w-6 h-6" />,
-      color: 'bg-green-500',
-    },
-    {
-      title: 'Completed Today',
-      value: stats.completedToday.toString(),
-      icon: <CheckCircle className="w-6 h-6" />,
-      color: 'bg-blue-500',
-    },
-    {
-      title: 'Average Rating',
-      value: stats.averageRating.toFixed(1),
-      icon: <TrendingUp className="w-6 h-6" />,
-      color: 'bg-yellow-500',
-    },
-    {
-      title: 'Active Hours',
-      value: `${stats.activeHours}h`,
-      icon: <Clock className="w-6 h-6" />,
-      color: 'bg-purple-500',
-    },
-  ];
+  const formatCurrency = (amount: number) => {
+    return `KES ${amount.toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
+  };
 
-  const getOrderStatusColor = (status: string) => {
-    switch (status) {
-      case 'ready': return 'warning';
-      case 'on_the_way': return 'info';
-      case 'delivered': return 'success';
-      default: return 'default';
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-KE', {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    });
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch(status) {
+      case 'pending': return <Badge variant="warning">Pending</Badge>;
+      case 'accepted': return <Badge variant="info">Accepted</Badge>;
+      case 'preparing': return <Badge variant="info">Preparing</Badge>;
+      case 'ready': return <Badge variant="success">Ready</Badge>;
+      case 'on_the_way': return <Badge variant="warning">On The Way</Badge>;
+      case 'delivered': return <Badge variant="success">Delivered</Badge>;
+      case 'cancelled': return <Badge variant="danger">Cancelled</Badge>;
+      default: return <Badge variant="outline">{status}</Badge>;
     }
   };
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center min-h-screen">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
       <div className="container mx-auto px-4 py-8">
-        {/* Header with Online Status */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Rider Dashboard</h1>
-            <div className="flex items-center mt-2">
-              <Badge variant={isOnline ? 'success' : 'danger'} className="mr-3">
-                {isOnline ? 'ONLINE' : 'OFFLINE'}
-              </Badge>
-              <div className="flex items-center text-sm text-gray-600">
-                <Wifi className="w-4 h-4 mr-1" />
-                {isConnected ? 'Connected' : 'Disconnected'}
+            <div className="flex items-center space-x-4">
+              <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
+                <User className="w-8 h-8 text-gray-400" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">Rider Dashboard</h1>
+                <div className="flex items-center space-x-3 mt-2">
+                  <Badge variant={isOnline ? 'success' : 'danger'}>
+                    {isOnline ? 'Online' : 'Offline'}
+                  </Badge>
+                  <span className="text-gray-600">Welcome back, {user?.name}!</span>
+                </div>
               </div>
             </div>
           </div>
-          <Button
-            variant={isOnline ? 'danger' : 'primary'}
-            size="lg"
-            onClick={handleToggleOnline}
-            isLoading={isLoading}
-            leftIcon={isOnline ? <PauseCircle className="w-5 h-5" /> : <PlayCircle className="w-5 h-5" />}
-          >
-            {isOnline ? 'Go Offline' : 'Go Online'}
-          </Button>
+          <div className="flex space-x-3 mt-4 md:mt-0">
+            <Button
+              variant={isOnline ? 'danger' : 'success'}
+              onClick={toggleOnlineStatus}
+            >
+              {isOnline ? (
+                <>
+                  <AlertCircle className="w-4 h-4 mr-2" />
+                  Go Offline
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Go Online
+                </>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              leftIcon={<Bell className="w-4 h-4" />}
+              onClick={() => navigate('/notifications')}
+            >
+              Notifications
+            </Button>
+            <Button
+              variant="outline"
+              leftIcon={<Settings className="w-4 h-4" />}
+              onClick={() => navigate('/dashboard/settings')}
+            >
+              Settings
+            </Button>
+          </div>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {statsCards.map((stat, index) => (
-            <Card key={index}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">{stat.title}</p>
-                    <p className="text-2xl font-bold mt-2">{stat.value}</p>
-                  </div>
-                  <div className={`${stat.color} p-3 rounded-lg`}>
-                    <div className="text-white">{stat.icon}</div>
-                  </div>
+        {/* Stats Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Today's Deliveries</p>
+                  <h3 className="text-2xl font-bold mt-2">{stats.todayDeliveries}</h3>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+                <div className="bg-blue-100 p-3 rounded-full">
+                  <Package className="w-6 h-6 text-blue-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Pending Orders</p>
+                  <h3 className="text-2xl font-bold mt-2">{stats.pendingDeliveries}</h3>
+                </div>
+                <div className="bg-yellow-100 p-3 rounded-full">
+                  <Clock className="w-6 h-6 text-yellow-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Total Earnings</p>
+                  <h3 className="text-2xl font-bold mt-2">{formatCurrency(stats.earnings)}</h3>
+                </div>
+                <div className="bg-green-100 p-3 rounded-full">
+                  <DollarSign className="w-6 h-6 text-green-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Rating</p>
+                  <h3 className="text-2xl font-bold mt-2">{stats.rating.toFixed(1)}</h3>
+                </div>
+                <div className="bg-purple-100 p-3 rounded-full">
+                  <TrendingUp className="w-6 h-6 text-purple-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Online Hours</p>
+                  <h3 className="text-2xl font-bold mt-2">{stats.onlineHours}</h3>
+                </div>
+                <div className="bg-orange-100 p-3 rounded-full">
+                  <Truck className="w-6 h-6 text-orange-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column - Assigned Orders & Map */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Current Location & Map */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Navigation className="w-5 h-5 mr-2" />
-                  Current Location
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {currentLocation ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-gray-600">Coordinates</p>
-                        <p className="font-mono">
-                          {currentLocation.lat.toFixed(6)}, {currentLocation.lng.toFixed(6)}
-                        </p>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          if (currentLocation) {
-                            updateRiderLocation(currentLocation.lat, currentLocation.lng);
-                            toast.success('Location updated');
-                          }
-                        }}
-                      >
-                        Update Location
-                      </Button>
-                    </div>
-                    <div className="h-64 bg-gray-200 rounded-lg flex items-center justify-center">
-                      <div className="text-center">
-                        <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                        <p className="text-gray-600">Map will appear here</p>
-                        <p className="text-sm text-gray-500 mt-2">
-                          Integration with Google Maps or Mapbox
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">Location not available</p>
-                    <p className="text-sm text-gray-500 mt-2">
-                      Please enable location services
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+        {/* Main Content */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="orders">My Orders</TabsTrigger>
+            <TabsTrigger value="available">Available Orders</TabsTrigger>
+            <TabsTrigger value="earnings">Earnings</TabsTrigger>
+            <TabsTrigger value="chat">Chat</TabsTrigger>
+          </TabsList>
 
-            {/* Assigned Orders */}
-            <Card>
+          {/* Overview Tab */}
+          <TabsContent value="overview">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Current Order */}
+              {currentOrder && (
+                <div className="lg:col-span-2">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center">
+                        <Package className="w-5 h-5 mr-2" />
+                        Current Delivery
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <h3 className="font-bold text-lg">Order #{currentOrder.order_id}</h3>
+                            <p className="text-gray-600">{currentOrder.restaurant?.name}</p>
+                          </div>
+                          {getStatusBadge(currentOrder.status)}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm text-gray-600">Pickup Location</p>
+                            <p className="font-medium">{currentOrder.restaurant?.address}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Delivery Location</p>
+                            <p className="font-medium">{currentOrder.delivery_address}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-4 border-t">
+                          <div>
+                            <p className="text-sm text-gray-600">Total Amount</p>
+                            <p className="text-xl font-bold">{formatCurrency(currentOrder.total_price)}</p>
+                          </div>
+                          <div className="space-x-2">
+                            {currentOrder.status === 'ready' && (
+                              <Button
+                                variant="primary"
+                                onClick={() => updateOrderStatus(currentOrder.order_id, 'on_the_way')}
+                              >
+                                Start Delivery
+                              </Button>
+                            )}
+                            {currentOrder.status === 'on_the_way' && (
+                              <Button
+                                variant="success"
+                                onClick={() => updateOrderStatus(currentOrder.order_id, 'delivered')}
+                              >
+                                Mark as Delivered
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Quick Actions */}
+              <div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Quick Actions</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Button
+                      variant="outline"
+                      fullWidth
+                      onClick={() => navigate('/dashboard/rider/earnings')}
+                    >
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      View Earnings
+                    </Button>
+                    
+                    <Button
+                      variant="outline"
+                      fullWidth
+                      onClick={() => navigate('/dashboard/rider/performance')}
+                    >
+                      <BarChart className="w-4 h-4 mr-2" />
+                      Performance
+                    </Button>
+                    
+                    <Button
+                      variant="outline"
+                      fullWidth
+                      onClick={() => navigate('/dashboard/rider/schedule')}
+                    >
+                      <Calendar className="w-4 h-4 mr-2" />
+                      Schedule
+                    </Button>
+                    
+                    <Button
+                      variant="outline"
+                      fullWidth
+                      onClick={() => navigate('/dashboard/rider/support')}
+                    >
+                      <Shield className="w-4 h-4 mr-2" />
+                      Support
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* Location Status */}
+                <Card className="mt-6">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <MapPin className="w-5 h-5 mr-2" />
+                      Location Status
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {location ? (
+                      <div className="space-y-2">
+                        <p className="text-sm text-gray-600">Current Location</p>
+                        <p className="font-medium">
+                          {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
+                        </p>
+                        <p className="text-xs text-gray-500">Location tracking active</p>
+                      </div>
+                    ) : (
+                      <div className="text-center py-4">
+                        <AlertCircle className="w-8 h-8 text-yellow-500 mx-auto mb-2" />
+                        <p className="text-sm text-gray-600">Location not available</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+
+            {/* Recent Orders */}
+            <Card className="mt-6">
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Package className="w-5 h-5 mr-2" />
-                  Assigned Orders
-                </CardTitle>
+                <CardTitle>Recent Orders</CardTitle>
               </CardHeader>
               <CardContent>
-                {isLoading ? (
-                  <div className="space-y-4">
-                    {[...Array(2)].map((_, i) => (
-                      <div key={i} className="h-24 bg-gray-200 animate-pulse rounded-lg"></div>
-                    ))}
-                  </div>
-                ) : assignedOrders.length === 0 ? (
+                {recentOrders.length === 0 ? (
                   <div className="text-center py-8">
                     <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">No assigned orders</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {assignedOrders.map((order) => (
-                      <div
-                        key={order.id}
-                        className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
-                      >
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <div className="flex items-center">
-                              <p className="font-bold">Order #{order.id}</p>
-                              <Badge variant={getOrderStatusColor(order.status)} className="ml-2">
-                                {order.status.replace('_', ' ')}
-                              </Badge>
-                            </div>
-                            <p className="text-sm text-gray-600 mt-1">{order.restaurant_name}</p>
-                          </div>
-                          <p className="font-bold">KSh {order.total}</p>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center text-sm text-gray-600">
-                            <MapPin className="w-4 h-4 mr-1" />
-                            <span>{order.delivery_address}</span>
-                          </div>
-                          <div className="flex space-x-2">
-                            <Button
-                              size="sm"
-                              variant="primary"
-                              onClick={() => handleAcceptOrder(order.id)}
-                            >
-                              Accept
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleRejectOrder(order.id)}
-                            >
-                              Reject
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Right Column - Quick Info & Recent Completed */}
-          <div className="space-y-6">
-            {/* Rider Info */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <User className="w-5 h-5 mr-2" />
-                  Rider Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Vehicle Type</p>
-                    <p className="font-medium">Motorcycle</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Current Battery</p>
-                    <div className="flex items-center">
-                      <Battery className="w-5 h-5 text-green-500 mr-2" />
-                      <span className="font-medium">85%</span>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Today's Distance</p>
-                    <p className="font-medium">45 km</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Recent Completed Orders */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Recently Completed</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {completedOrders.length === 0 ? (
-                  <div className="text-center py-4">
-                    <p className="text-gray-600">No completed orders today</p>
+                    <p className="text-gray-600">No recent orders</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {completedOrders.map((order) => (
-                      <div key={order.id} className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">Order #{order.id}</p>
-                          <p className="text-sm text-gray-500">
-                            {new Date(order.delivered_at).toLocaleTimeString()}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold">KSh {order.total}</p>
-                          <Badge variant="success" size="sm">
-                            Delivered
-                          </Badge>
+                    {recentOrders.slice(0, 5).map(order => (
+                      <div key={order.order_id} className="p-4 border rounded-lg">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <div className="flex items-center space-x-2 mb-2">
+                              <span className="font-medium">Order #{order.order_id}</span>
+                              {getStatusBadge(order.status)}
+                            </div>
+                            <p className="text-sm text-gray-600">
+                              {order.restaurant?.name} → {order.customer?.user?.name}
+                            </p>
+                            <p className="text-sm text-gray-500">{formatDate(order.created_at)}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold">{formatCurrency(order.total_price)}</p>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => navigate(`/dashboard/rider/orders/${order.order_id}`)}
+                            >
+                              View Details
+                              <ChevronRight className="w-4 h-4 ml-1" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -395,29 +580,168 @@ export const RiderDashboard: React.FC = () => {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
 
-            {/* Quick Actions */}
+          {/* My Orders Tab */}
+          <TabsContent value="orders">
             <Card>
               <CardHeader>
-                <CardTitle>Quick Actions</CardTitle>
+                <CardTitle>My Orders</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <Button variant="outline" fullWidth leftIcon={<Navigation className="w-4 h-4" />}>
-                  Update Location
-                </Button>
-                <Button variant="outline" fullWidth leftIcon={<Clock className="w-4 h-4" />}>
-                  View Schedule
-                </Button>
-                <Button variant="outline" fullWidth leftIcon={<DollarSign className="w-4 h-4" />}>
-                  View Earnings
-                </Button>
-                <Button variant="outline" fullWidth leftIcon={<AlertCircle className="w-4 h-4" />}>
-                  Report Issue
-                </Button>
+              <CardContent>
+                {recentOrders.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">No orders yet</h3>
+                    <p className="text-gray-600 mb-6">Start accepting orders to see them here</p>
+                    <Button
+                      variant="primary"
+                      onClick={() => setActiveTab('available')}
+                    >
+                      View Available Orders
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {recentOrders.map(order => (
+                      <div key={order.order_id} className="p-4 border rounded-lg">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-3 mb-3">
+                              <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
+                                <Truck className="w-5 h-5 text-gray-400" />
+                              </div>
+                              <div>
+                                <h3 className="font-bold">Order #{order.order_id}</h3>
+                                <div className="flex items-center space-x-2 mt-1">
+                                  {getStatusBadge(order.status)}
+                                  <span className="text-sm text-gray-500">
+                                    {formatDate(order.created_at)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div>
+                                <p className="text-sm text-gray-600">Restaurant</p>
+                                <p className="font-medium">{order.restaurant?.name}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600">Customer</p>
+                                <p className="font-medium">{order.customer?.user?.name}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600">Amount</p>
+                                <p className="font-bold">{formatCurrency(order.total_price)}</p>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="mt-4 md:mt-0 space-x-2">
+                            <Button
+                              variant="outline"
+                              onClick={() => navigate(`/dashboard/rider/orders/${order.order_id}`)}
+                            >
+                              View Details
+                            </Button>
+                            {order.status === 'ready' && (
+                              <Button
+                                variant="primary"
+                                onClick={() => acceptOrder(order.order_id)}
+                              >
+                                Accept Order
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
-          </div>
-        </div>
+          </TabsContent>
+
+          {/* Available Orders Tab */}
+          <TabsContent value="available">
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle>Available Orders</CardTitle>
+                  <Badge variant="info">{availableOrders.length} available</Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {availableOrders.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">No available orders</h3>
+                    <p className="text-gray-600">New orders will appear here when available</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {availableOrders.map(order => (
+                      <Card key={order.order_id} className="hover:shadow-lg transition-shadow">
+                        <CardHeader>
+                          <div className="flex justify-between items-start">
+                            <CardTitle className="text-lg">Order #{order.order_id}</CardTitle>
+                            <Badge variant="success">KES {order.total_price}</Badge>
+                          </div>
+                          <p className="text-sm text-gray-600">{order.restaurant?.name}</p>
+                        </CardHeader>
+                        
+                        <CardContent>
+                          <div className="space-y-3">
+                            <div>
+                              <p className="text-sm text-gray-600">Pickup</p>
+                              <p className="text-sm font-medium truncate">{order.restaurant?.address}</p>
+                            </div>
+                            
+                            <div>
+                              <p className="text-sm text-gray-600">Delivery</p>
+                              <p className="text-sm font-medium truncate">{order.delivery_address}</p>
+                            </div>
+                            
+                            <div className="flex items-center text-sm text-gray-600">
+                              <Clock className="w-4 h-4 mr-2" />
+                              <span>{formatDate(order.created_at)}</span>
+                            </div>
+                            
+                            <div className="flex items-center text-sm text-gray-600">
+                              <Package className="w-4 h-4 mr-2" />
+                              <span>{order.orderItems?.length || 0} items</span>
+                            </div>
+                          </div>
+                        </CardContent>
+                        
+                        <div className="px-6 py-4 border-t">
+                          <Button
+                            fullWidth
+                            variant="primary"
+                            onClick={() => acceptOrder(order.order_id)}
+                          >
+                            Accept Order
+                          </Button>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Earnings Tab */}
+          <TabsContent value="earnings">
+            <RiderEarningsTab userId={user?.user_id} />
+          </TabsContent>
+
+          {/* Chat Tab */}
+          <TabsContent value="chat">
+            <RiderChatTab userId={user?.user_id} />
+          </TabsContent>
+        </Tabs>
       </div>
     </Layout>
   );

@@ -1,5 +1,5 @@
+// src/services/websocketService.ts - FIXED
 import { io, Socket } from 'socket.io-client';
-import type{ OrderUpdateEvent, RiderLocationUpdate, Message } from '../types';
 
 class WebSocketService {
   private socket: Socket | null = null;
@@ -21,7 +21,6 @@ class WebSocketService {
 
     this.socket.on('connect', () => {
       console.log('WebSocket connected');
-      this.emit('authenticate', { token });
     });
 
     this.socket.on('disconnect', () => {
@@ -33,46 +32,33 @@ class WebSocketService {
     });
 
     // Listen for order updates
-    this.socket.on('orderStatusUpdated', (data: OrderUpdateEvent) => {
-      this.notifyListeners('orderStatusUpdated', data);
-    });
-
-    this.socket.on('riderAssigned', (data: any) => {
-      this.notifyListeners('riderAssigned', data);
-    });
-
-    this.socket.on('orderRated', (data: any) => {
-      this.notifyListeners('orderRated', data);
-    });
-
-    this.socket.on('orderDelivered', (data: any) => {
-      this.notifyListeners('orderDelivered', data);
+    this.socket.on('order-update', (data: any) => {
+      console.log('Order update received:', data);
+      this.notifyListeners('order-update', data);
     });
 
     // Listen for rider location updates
-    this.socket.on('locationUpdated', (data: RiderLocationUpdate) => {
-      this.notifyListeners('locationUpdated', data);
-    });
-
-    this.socket.on('riderLocation', (data: RiderLocationUpdate) => {
-      this.notifyListeners('riderLocation', data);
+    this.socket.on('rider-location', (data: any) => {
+      console.log('Rider location update:', data);
+      this.notifyListeners('rider-location', data);
     });
 
     // Listen for chat messages
-    this.socket.on('newMessage', (message: Message) => {
-      this.notifyListeners('newMessage', message);
+    this.socket.on('chat-message', (data: any) => {
+      console.log('Chat message received:', data);
+      this.notifyListeners('chat-message', data);
     });
 
-    this.socket.on('userTyping', (data: any) => {
-      this.notifyListeners('userTyping', data);
+    // Listen for auto-assignment notifications
+    this.socket.on('rider-assigned', (data: any) => {
+      console.log('Rider assigned:', data);
+      this.notifyListeners('rider-assigned', data);
     });
 
-    this.socket.on('unreadCountUpdate', (data: any) => {
-      this.notifyListeners('unreadCountUpdate', data);
-    });
-
-    this.socket.on('chatCleared', (data: any) => {
-      this.notifyListeners('chatCleared', data);
+    // Listen for timeout notifications (after 5 minutes)
+    this.socket.on('assignment-timeout', (data: any) => {
+      console.log('Assignment timeout, notify customer care:', data);
+      this.notifyListeners('assignment-timeout', data);
     });
   }
 
@@ -121,57 +107,39 @@ class WebSocketService {
     }
   }
 
-  // Order room management
+  // Join order room
   joinOrderRoom(orderId: number): void {
-    this.emit('joinOrderRoom', { orderId });
-    this.emit('subscribeOrder', { orderId });
+    this.emit('join-order-room', { orderId });
   }
 
+  // Leave order room
   leaveOrderRoom(orderId: number): void {
-    this.emit('leaveOrderRoom', { orderId });
-    this.emit('unsubscribeOrder', { orderId });
+    this.emit('leave-order-room', { orderId });
   }
 
-  // Rider location subscription
+  // Subscribe to rider location
   subscribeToRider(riderId: number): void {
-    this.emit('subscribeRider', { riderId });
+    this.emit('subscribe-rider', { riderId });
   }
 
+  // Unsubscribe from rider
   unsubscribeFromRider(riderId: number): void {
-    this.emit('unsubscribeRider', { riderId });
+    this.emit('unsubscribe-rider', { riderId });
   }
 
-  updateRiderLocation(location: { latitude: number; longitude: number; address?: string }): void {
-    this.emit('updateLocation', location);
+  // Send chat message
+  sendChatMessage(orderId: number, senderId: number, content: string, senderType: 'customer' | 'rider'): void {
+    this.emit('send-chat-message', {
+      orderId,
+      senderId,
+      content,
+      senderType
+    });
   }
 
-  // Chat management
-  joinChat(orderId: number, userId: number, userType: 'customer' | 'rider'): void {
-    this.emit('joinChat', { orderId, userId, userType });
-  }
-
-  leaveChat(orderId: number, userId: number): void {
-    this.emit('leaveChat', { orderId, userId });
-  }
-
-  sendMessage(orderId: number, senderId: number, content: string, senderType: 'customer' | 'rider'): void {
-    this.emit('sendMessage', { orderId, senderId, content, senderType });
-  }
-
+  // Mark messages as read
   markMessagesAsRead(orderId: number, userId: number): void {
-    this.emit('markMessagesAsRead', { orderId, userId });
-  }
-
-  getUnreadCount(orderId: number, userId: number): void {
-    this.emit('getUnreadCount', { orderId, userId });
-  }
-
-  typingStart(orderId: number, userId: number, userType: 'customer' | 'rider'): void {
-    this.emit('typingStart', { orderId, userId, userType });
-  }
-
-  typingStop(orderId: number, userId: number, userType: 'customer' | 'rider'): void {
-    this.emit('typingStop', { orderId, userId, userType });
+    this.emit('mark-messages-read', { orderId, userId });
   }
 
   // Helper to check connection

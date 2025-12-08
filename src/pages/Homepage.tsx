@@ -1,3 +1,4 @@
+// src/pages/Homepage.tsx - FIXED VERSION
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
@@ -15,7 +16,7 @@ import { FoodCard } from '../components/food/FoodCard';
 import { CategoryFilter } from '../components/food/CategoryFilter';
 import { Button } from '../components/ui/button';
 import { RestaurantService } from '../services/restaurantService';
-import type{ Restaurant, MenuItem } from '../types';
+import type { Restaurant, MenuItem } from '../types';
 import toast from 'react-hot-toast';
 
 export const HomePage: React.FC = () => {
@@ -30,19 +31,16 @@ export const HomePage: React.FC = () => {
       title: 'Delicious Food Delivered Fast',
       description: 'Get your favorite meals delivered in minutes',
       image: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38',
-      bgColor: 'from-orange-500 to-orange-600',
     },
     {
       title: 'Exclusive Offers',
       description: 'Up to 50% off on your first order',
       image: 'https://images.unsplash.com/photo-1565958011703-44f9829ba187',
-      bgColor: 'from-green-500 to-green-600',
     },
     {
       title: '24/7 Delivery',
       description: 'Order anytime, anywhere',
       image: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445',
-      bgColor: 'from-blue-500 to-blue-600',
     },
   ];
 
@@ -100,7 +98,7 @@ export const HomePage: React.FC = () => {
 
   return (
     <Layout>
-      {/* Hero Section */}
+      {/* Hero Section - FIXED: All elements wrapped in a single parent div */}
       <div className="relative overflow-hidden">
         <div className="relative h-[500px]">
           {heroSlides.map((slide, index) => (
@@ -110,45 +108,48 @@ export const HomePage: React.FC = () => {
                 index === currentSlide ? 'opacity-100' : 'opacity-0 pointer-events-none'
               }`}
             >
-              <div className={`absolute inset-0 bg-gradient-to-r ${slide.bgColor}`}>
-                <div className="container mx-auto px-4 h-full flex items-center">
-                  <div className="max-w-xl text-white">
-                    <h1 className="text-4xl md:text-5xl font-bold mb-4">
-                      {slide.title}
-                    </h1>
-                    <p className="text-xl mb-8 opacity-90">{slide.description}</p>
-                    <Link to="/restaurants">
-                      <Button
-                        variant="primary"
-                        size="lg"
-                        rightIcon={<ArrowRight className="w-5 h-5" />}
-                        className="bg-white text-orange-600 hover:bg-gray-100"
-                      >
-                        Order Now
-                      </Button>
-                    </Link>
-                  </div>
+              <div 
+                className="absolute inset-0 bg-cover bg-center"
+                style={{ backgroundImage: `url(${slide.image})` }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent" />
+              <div className="container mx-auto px-4 h-full flex items-center relative z-10">
+                <div className="max-w-xl text-white">
+                  <h1 className="text-4xl md:text-5xl font-bold mb-4">
+                    {slide.title}
+                  </h1>
+                  <p className="text-xl mb-8 opacity-90">{slide.description}</p>
+                  <Link to="/restaurants">
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      rightIcon={<ArrowRight className="w-5 h-5" />}
+                      className="bg-golden text-orange-600 hover:bg-gray-100"
+                    >
+                      Order Now
+                    </Button>
+                  </Link>
                 </div>
               </div>
             </div>
           ))}
 
-          {/* Navigation Arrows */}
+          {/* Navigation Arrows - Now properly placed inside the parent div */}
           <button
             onClick={prevSlide}
-            className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full p-2 text-white transition-colors"
+            className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full p-2 text-white transition-colors z-20"
           >
             <ChevronLeft className="w-6 h-6" />
           </button>
           <button
             onClick={nextSlide}
-            className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full p-2 text-white transition-colors"
+            className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full p-2 text-white transition-colors z-20"
           >
             <ChevronRight className="w-6 h-6" />
           </button>
 
           {/* Dots */}
-          <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex space-x-2">
+          <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex space-x-2 z-20">
             {heroSlides.map((_, index) => (
               <button
                 key={index}
@@ -258,15 +259,15 @@ export const HomePage: React.FC = () => {
             Ready to Order?
           </h2>
           <p className="text-xl mb-8 opacity-90 max-w-2xl mx-auto">
-            Download our app for faster ordering and exclusive offers
+            You will be able to download our app for faster ordering and exclusive offers soon
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button
               variant="primary"
               size="lg"
-              className="bg-white text-orange-600 hover:bg-gray-100"
+              className="bg-golden text-orange-600 hover:bg-gray-100"
             >
-              Download on App Store
+              App to be on App Store soon!
             </Button>
             <Button
               variant="outline"
