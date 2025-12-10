@@ -1,7 +1,7 @@
-// src/services/api.ts
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+// FIXED: Use relative path for development with Vite proxy
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE_URL;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -41,6 +41,7 @@ api.interceptors.response.use(
         if (refreshToken && userStr) {
           const user = JSON.parse(userStr);
           
+          // FIXED: Use the same API_BASE_URL (now import.meta.env.VITE_API_BASE_URL)
           const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {}, {
             headers: {
               Authorization: `Bearer ${refreshToken}`,

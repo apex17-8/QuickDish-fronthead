@@ -4,7 +4,7 @@ import type { Order, OrderStatus, CreateOrderDto } from '../../types';
 export const orderApi = createApi({
   reducerPath: 'orderApi',
   baseQuery: fetchBaseQuery({ 
-    baseUrl: 'http://localhost:8000',
+    baseUrl: import.meta.env.VITE_API_BASE_URL,
     prepareHeaders: (headers) => {
       const token = localStorage.getItem('token');
       if (token) {

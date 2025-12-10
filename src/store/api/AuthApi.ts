@@ -4,7 +4,8 @@ import type { LoginRequest, LoginResponse, SignupRequest, User } from '../../typ
 export const authApi = createApi({
   reducerPath: 'authApi',
   baseQuery: fetchBaseQuery({ 
-    baseUrl: 'http://localhost:8000',
+    // FIXED: Changed from full URL to relative path
+    baseUrl: import.meta.env.VITE_API_BASE_URL,
     prepareHeaders: (headers) => {
       const token = localStorage.getItem('token');
       if (token) {

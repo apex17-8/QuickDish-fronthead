@@ -35,7 +35,7 @@ export const HomePage: React.FC = () => {
     {
       title: 'Exclusive Offers',
       description: 'Up to 50% off on your first order',
-      image: 'https://images.unsplash.com/photo-1565958011703-44f9829ba187',
+      image: 'https://images.unsplash.com/flagged/photo-1578832755387-4973ac1fc67f?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8ODR8fGZvb2QlMjBvZmZlcnMlMjBhZnJpY2FufGVufDB8fDB8fHww',
     },
     {
       title: '24/7 Delivery',
@@ -274,7 +274,7 @@ export const HomePage: React.FC = () => {
               size="lg"
               className="bg-transparent border-white text-white hover:bg-white/10"
             >
-              Download on Google Play
+              Download on Google Play 
             </Button>
           </div>
         </div>

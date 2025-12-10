@@ -3,7 +3,6 @@ import { Header } from './header';
 import { Footer } from './footer';
 import { Toaster } from 'react-hot-toast';
 import { NotificationProvider } from './NotificationProvinder';
-import { NotificationBell } from '../ui/NotificationBell';
 
 interface LayoutProps {
   children: React.ReactNode;

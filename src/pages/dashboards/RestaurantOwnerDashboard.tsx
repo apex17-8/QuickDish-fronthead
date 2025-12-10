@@ -10,7 +10,6 @@ import { useAuth } from '../../hooks/useAuth';
 import { RestaurantOwnerService } from '../../services/restaurantOwnerService';
 import toast from 'react-hot-toast';
 
-// This will replace your current RestaurantDashboard component
 export const RestaurantOwnerDashboard: React.FC = () => {
   const [restaurants, setRestaurants] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);

@@ -20,7 +20,7 @@ export const Header: React.FC = () => {
   const navigate = useNavigate();
   
   const { itemCount } = useCart();
-  const { isAuthenticated, userRole, logout } = useAuth();
+  const { isAuthenticated, user, logout } = useAuth();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +51,7 @@ export const Header: React.FC = () => {
           {/* Location Selector */}
           <div className="hidden md:flex items-center space-x-2 px-4 py-2 bg-gray-50 rounded-lg">
             <MapPin className="w-5 h-5 text-gray-500" />
-            <span className="text-gray-700">Nairobi, Kenya</span>
+            <span className="text-gray-700">Chuka, Kenya</span>
             <ChevronDown className="w-4 h-4 text-gray-500" />
           </div>
 
@@ -82,7 +82,7 @@ export const Header: React.FC = () => {
             </Link>
 
             {/* Notifications */}
-            <button className="relative">
+            <button title ="Notifications" className="relative">
               <Bell className="w-6 h-6 text-gray-700" />
               <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-3 h-3"></span>
             </button>
@@ -104,7 +104,7 @@ export const Header: React.FC = () => {
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-2 z-50">
                     <div className="px-4 py-2 border-b">
                       <p className="font-medium text-gray-900">Welcome!</p>
-                      <p className="text-sm text-gray-500">{userRole}</p>
+                      <p className="text-sm text-gray-500">{user.name}</p>
                     </div>
                     {userMenuItems.map((item, index) => (
                       <Link

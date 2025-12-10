@@ -53,7 +53,7 @@ export const OrdersPage: React.FC = () => {
   const fetchOrders = async () => {
     try {
       setIsLoading(true);
-      const userOrders = await OrdersService.getUserOrders();
+      const userOrders = await OrdersService.getCustomerOrders();
       setOrders(userOrders);
     } catch (error) {
       toast.error('Failed to load orders');
