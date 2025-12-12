@@ -28,6 +28,7 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
 
           return (
             <button
+            title='category-filter-button'
               key={category.id}
               onClick={() => onCategoryChange(category.id)}
               className={`flex flex-col items-center justify-center p-4 rounded-xl min-w-[80px] transition-all ${

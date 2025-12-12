@@ -49,27 +49,35 @@ export const CheckoutPage: React.FC = () => {
       return;
     }
 
+    // Get customer ID properly
+    const customerId = customer?.customer_id || user.user_id;
+
     setIsLoading(true);
     try {
       // Update customer's default address if needed
       if (customer && deliveryAddress !== customer.default_address) {
-        await CustomerService.setDefaultAddress(customer.customer_id, deliveryAddress);
-        await refreshUserData();
+        try {
+          // FIX: Remove customer_id parameter - method only takes address
+          await CustomerService.setDefaultAddress(deliveryAddress);
+          await refreshUserData();
+        } catch (error) {
+          console.warn('Failed to update default address:', error);
+          // Don't fail the order if address update fails
+        }
       }
 
-      // Prepare order data
+      // Prepare order data - FIXED to match backend DTO
       const orderData = {
-        restaurantId,
-        restaurantName,
-        deliveryAddress,
-        specialInstructions: instructions,
+        customer_id: customerId,
+        restaurant_id: restaurantId,
+        delivery_address: deliveryAddress,
+        notes: instructions,
         items: items.map(item => ({
-          menu_item: item.menu_item,
+          menu_item_id: item.menu_item.menu_item_id, // FIXED property name
           quantity: item.quantity,
-          specialInstructions: item.specialInstructions,
+          special_instructions: item.specialInstructions, // FIXED property name
         })),
-        total: total,
-        customerId: customer?.customer_id,
+        // Remove total - backend calculates it
       };
 
       // Place order using workflow hook
@@ -77,7 +85,7 @@ export const CheckoutPage: React.FC = () => {
       
       if (order) {
         // Show success message
-        toast.success(`Order #${order.order_number} placed successfully!`, {
+        toast.success(`Order #${order.order_number || order.order_id} placed successfully!`, {
           duration: 5000,
         });
         
@@ -93,6 +101,7 @@ export const CheckoutPage: React.FC = () => {
         }
       }
     } catch (error: any) {
+      console.error('Order placement error:', error);
       toast.error(error.message || 'Failed to place order');
     } finally {
       setIsLoading(false);

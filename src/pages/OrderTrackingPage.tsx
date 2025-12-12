@@ -19,8 +19,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { OrdersService } from '../services/ordersService';
-import { useWebSocket } from '../hooks/useWebsockets';
-import type{ Order, OrderStatus } from '../types';
+import { useWebSockets } from '../hooks/useWebsockets';
+import type { 
+  Order, 
+  OrderStatus, 
+  OrderUpdateEvent, 
+  RiderLocationEvent,
+  RiderAssignedEvent,
+  PaymentUpdateEvent,
+  OrderDeliveredEvent 
+} from '../types';
 import toast from 'react-hot-toast';
 
 export const OrderTrackingPage: React.FC = () => {
@@ -30,39 +38,62 @@ export const OrderTrackingPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [estimatedTime, setEstimatedTime] = useState<string>('25-35 min');
   
-  const { subscribeToOrder, subscribeToRiderLocation } = useWebSocket();
+  const { subscribeToOrder, subscribeToRiderLocation } = useWebSockets();
 
   useEffect(() => {
-    fetchOrderDetails();
+    if (id) {
+      fetchOrderDetails();
+    }
   }, [id]);
 
   useEffect(() => {
     if (order?.rider?.rider_id) {
       // Subscribe to rider location updates
-      const unsubscribe = subscribeToRiderLocation(
+      const unsubscribeLocation = subscribeToRiderLocation(
         order.rider.rider_id,
-        (location) => {
-          setRiderLocation(location);
+        (location: RiderLocationEvent) => {
+          setRiderLocation({ 
+            lat: location.latitude, 
+            lng: location.longitude 
+          });
         }
       );
 
-      // Subscribe to order updates
+      // Subscribe to order updates - Handle all possible event types
       const unsubscribeOrder = subscribeToOrder(
         order.order_id,
-        (update) => {
-          if (update.type === 'statusUpdate') {
+        (data: OrderUpdateEvent | RiderAssignedEvent | PaymentUpdateEvent | OrderDeliveredEvent) => {
+          // Handle different event types
+          // Type guard for OrderUpdateEvent
+          if ('status' in data && 'updatedAt' in data) {
             fetchOrderDetails();
-            toast.success(`Order status updated to ${update.status}`);
+            toast.success(`Order status updated to ${data.status}`);
+          }
+          // Type guard for RiderAssignedEvent
+          else if ('riderId' in data && 'assignedAt' in data) {
+            fetchOrderDetails();
+            toast.success('Rider assigned to your order!');
+          }
+          // Type guard for PaymentUpdateEvent
+          else if ('paymentStatus' in data && 'amountPaid' in data) {
+            if (data.paymentStatus === 'paid') {
+              toast.success('Payment confirmed!');
+            }
+          }
+          // Type guard for OrderDeliveredEvent
+          else if ('deliveredAt' in data && 'riderId' in data) {
+            toast.success('Order delivered!');
+            fetchOrderDetails();
           }
         }
       );
 
       return () => {
-        unsubscribe();
+        unsubscribeLocation();
         unsubscribeOrder();
       };
     }
-  }, [order?.rider?.rider_id, order?.order_id]);
+  }, [order?.rider?.rider_id, order?.order_id, subscribeToOrder, subscribeToRiderLocation]);
 
   const fetchOrderDetails = async () => {
     if (!id) return;
@@ -86,6 +117,7 @@ export const OrderTrackingPage: React.FC = () => {
       
       setEstimatedTime(statusTimes[orderData.status] || '25-35 min');
     } catch (error) {
+      console.error('Error fetching order details:', error);
       toast.error('Failed to load order details');
     } finally {
       setIsLoading(false);
@@ -94,31 +126,35 @@ export const OrderTrackingPage: React.FC = () => {
 
   const getStatusSteps = () => {
     const steps = [
-      { status: 'pending', label: 'Order Placed', icon: Package },
-      { status: 'preparing', label: 'Preparing', icon: ChefHat },
-      { status: 'ready', label: 'Ready', icon: CheckCircle },
-      { status: 'on_the_way', label: 'On the Way', icon: Navigation },
-      { status: 'delivered', label: 'Delivered', icon: CheckCircle },
+      { status: 'pending' as OrderStatus, label: 'Order Placed', icon: Package },
+      { status: 'preparing' as OrderStatus, label: 'Preparing', icon: ChefHat },
+      { status: 'ready' as OrderStatus, label: 'Ready', icon: CheckCircle },
+      { status: 'on_the_way' as OrderStatus, label: 'On the Way', icon: Navigation },
+      { status: 'delivered' as OrderStatus, label: 'Delivered', icon: CheckCircle },
     ];
 
     return steps.map((step, index) => {
       const StepIcon = step.icon;
-      let status = 'pending';
+      let stepStatus: 'pending' | 'completed' | 'current' = 'pending';
       
       if (order) {
         const stepIndex = steps.findIndex(s => s.status === step.status);
         const currentIndex = steps.findIndex(s => s.status === order.status);
         
         if (stepIndex < currentIndex) {
-          status = 'completed';
+          stepStatus = 'completed';
         } else if (stepIndex === currentIndex) {
-          status = 'current';
+          stepStatus = 'current';
+        } else if (order.status === 'delivered' && step.status === 'delivered') {
+          stepStatus = 'completed';
+        } else if (order.status === 'cancelled') {
+          stepStatus = 'pending'; // Reset all steps if cancelled
         }
       }
 
       return {
         ...step,
-        status,
+        stepStatus,
         StepIcon,
         isLast: index === steps.length - 1,
       };
@@ -137,17 +173,29 @@ export const OrderTrackingPage: React.FC = () => {
     }
   };
 
-  const handleShareOrder = () => {
+  const handleShareOrder = async () => {
     if (navigator.share) {
-      navigator.share({
-        title: `Order #${order?.order_id}`,
-        text: `Track my QuickFood order #${order?.order_id}`,
-        url: window.location.href,
-      });
+      try {
+        await navigator.share({
+          title: `Order #${order?.order_id}`,
+          text: `Track my QuickFood order #${order?.order_id}`,
+          url: window.location.href,
+        });
+      } catch (error) {
+        console.log('Sharing cancelled');
+      }
     } else {
-      navigator.clipboard.writeText(window.location.href);
-      toast.success('Link copied to clipboard');
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        toast.success('Link copied to clipboard');
+      } catch (error) {
+        toast.error('Failed to copy link');
+      }
     }
+  };
+
+  const handlePrint = () => {
+    window.print();
   };
 
   if (isLoading) {
@@ -214,10 +262,18 @@ export const OrderTrackingPage: React.FC = () => {
               </div>
             </div>
             <div className="flex space-x-3 mt-4 md:mt-0">
-              <Button variant="outline" leftIcon={<Share2 className="w-4 h-4" />} onClick={handleShareOrder}>
+              <Button 
+                variant="outline" 
+                leftIcon={<Share2 className="w-4 h-4" />} 
+                onClick={handleShareOrder}
+              >
                 Share
               </Button>
-              <Button variant="outline" leftIcon={<Printer className="w-4 h-4" />}>
+              <Button 
+                variant="outline" 
+                leftIcon={<Printer className="w-4 h-4" />}
+                onClick={handlePrint}
+              >
                 Print
               </Button>
             </div>
@@ -243,9 +299,9 @@ export const OrderTrackingPage: React.FC = () => {
                         <div key={step.status} className="flex items-start">
                           <div className="relative z-10">
                             <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                              step.status === 'completed'
+                              step.stepStatus === 'completed'
                                 ? 'bg-green-100 text-green-600'
-                                : step.status === 'current'
+                                : step.stepStatus === 'current'
                                 ? 'bg-orange-100 text-orange-600'
                                 : 'bg-gray-100 text-gray-400'
                             }`}>
@@ -255,17 +311,17 @@ export const OrderTrackingPage: React.FC = () => {
                           <div className="ml-6 flex-1">
                             <div className="flex items-center justify-between">
                               <h3 className="font-medium text-gray-900">{step.label}</h3>
-                              {step.status === 'completed' && (
+                              {step.stepStatus === 'completed' && (
                                 <Badge variant="success">Completed</Badge>
                               )}
-                              {step.status === 'current' && (
+                              {step.stepStatus === 'current' && (
                                 <Badge variant="warning">In Progress</Badge>
                               )}
                             </div>
                             <p className="text-gray-600 mt-1">
-                              {step.status === 'completed'
+                              {step.stepStatus === 'completed'
                                 ? 'Step completed successfully'
-                                : step.status === 'current'
+                                : step.stepStatus === 'current'
                                 ? 'Currently in this stage'
                                 : 'Waiting to start'}
                             </p>
@@ -293,15 +349,20 @@ export const OrderTrackingPage: React.FC = () => {
                           <div>
                             <p className="font-medium">{item.menu_item.name}</p>
                             <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
+                            {item.special_instructions && (
+                              <p className="text-sm text-gray-500 italic">
+                                Note: {item.special_instructions}
+                              </p>
+                            )}
                           </div>
                         </div>
-                        <p className="font-bold">KSh {item.price_at_purchase * item.quantity}</p>
+                        <p className="font-bold">KSh {(item.price_at_purchase * item.quantity).toFixed(2)}</p>
                       </div>
                     ))}
                     <div className="pt-4 border-t">
                       <div className="flex justify-between font-bold text-lg">
                         <span>Total</span>
-                        <span>KSh {order.total_price}</span>
+                        <span>KSh {order.total_price.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
@@ -403,7 +464,9 @@ export const OrderTrackingPage: React.FC = () => {
                       <p className="text-sm text-gray-500 mt-2">
                         {riderLocation
                           ? `Rider is nearby (${riderLocation.lat.toFixed(4)}, ${riderLocation.lng.toFixed(4)})`
-                          : 'Waiting for location update'}
+                          : order.rider
+                          ? 'Waiting for location update'
+                          : 'No rider assigned yet'}
                       </p>
                     </div>
                   </div>

@@ -1,4 +1,3 @@
-// src/App.tsx
 import React from "react";
 import {
   BrowserRouter as Router,
@@ -16,6 +15,7 @@ import { SignupPage } from "./pages/auth/SignupPage";
 import { CartPage } from "./pages/CartPage";
 import { CheckoutPage } from "./pages/CheckoutPage";
 import { RestaurantPage } from "./pages/RestaurantPage";
+import { RestaurantDetailPage } from "./pages/RestaurantDetailPage"; // NEW: Create this component
 import { OrderTrackingPage } from "./pages/OrderTrackingPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { OrdersPage } from "./pages/OrdersPage";
@@ -95,8 +95,8 @@ export default function App() {
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/cart" element={<CartPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
-          <Route path="/restaurants" element={<RestaurantPage />} />
-          <Route path="/restaurants/:id" element={<RestaurantPage />} />
+          <Route path="/restaurants" element={<RestaurantPage />} /> {/* Restaurant listing */}
+          <Route path="/restaurants/:id" element={<RestaurantDetailPage />} /> {/* Restaurant detail - NEW */}
           <Route path="/track-order/:id" element={<OrderTrackingPage />} />
           <Route path="/orders" element={<OrdersPage />} />
 

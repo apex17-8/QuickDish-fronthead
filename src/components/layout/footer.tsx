@@ -32,16 +32,16 @@ export const Footer: React.FC = () => {
               Delivering delicious meals to your doorstep. Fast, reliable, and always fresh.
             </p>
             <div className="flex space-x-4">
-              <a href="#" className="text-gray-400 hover:text-white">
+              <a title="Facebook" href="#" className="text-gray-400 hover:text-white">
                 <Facebook className="w-5 h-5" />
               </a>
-              <a href="#" className="text-gray-400 hover:text-white">
+              <a title="Twitter" href="#" className="text-gray-400 hover:text-white">
                 <Twitter className="w-5 h-5" />
               </a>
-              <a href="#" className="text-gray-400 hover:text-white">
+              <a title="Instagram" href="#" className="text-gray-400 hover:text-white">
                 <Instagram className="w-5 h-5" />
               </a>
-              <a href="#" className="text-gray-400 hover:text-white">
+              <a title="Linkedin" href="#" className="text-gray-400 hover:text-white">
                 <Linkedin className="w-5 h-5" />
               </a>
             </div>

@@ -56,6 +56,7 @@ export const CartSummary: React.FC<CartSummaryProps> = ({
           </Link>
         ) : (
           <Button
+          title='Proceed to Checkout'
             variant="primary"
             size="lg"
             fullWidth

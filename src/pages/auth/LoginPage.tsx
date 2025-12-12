@@ -36,17 +36,23 @@ export const LoginPage: React.FC = () => {
   const redirectBasedOnRole = (role: string) => {
     switch(role) {
       case 'restaurant_owner':
+        navigate('/dashboard/owner');
+        break;
       case 'manager':
-        navigate('/dashboard/restaurant');
+        navigate('/dashboard/manager');
         break;
       case 'rider':
         navigate('/dashboard/rider');
         break;
       case 'customer_care':
+        navigate('/dashboard/customerCare');
+        break;
       case 'super_admin':
         navigate('/dashboard/admin');
         break;
       case 'customer':
+        navigate('/customer');
+        break;
       default:
         navigate('/dashboard');
         break;

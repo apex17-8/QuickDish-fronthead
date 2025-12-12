@@ -1,10 +1,11 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { Order, OrderStatus, CreateOrderDto } from '../../types';
+import { BACKEND_URL } from '../../utils/utils';
 
 export const orderApi = createApi({
   reducerPath: 'orderApi',
   baseQuery: fetchBaseQuery({ 
-    baseUrl: import.meta.env.VITE_API_BASE_URL,
+    baseUrl: BACKEND_URL,
     prepareHeaders: (headers) => {
       const token = localStorage.getItem('token');
       if (token) {
@@ -62,7 +63,7 @@ export const orderApi = createApi({
     }),
 
     // Create order with payment
-    createOrderWithPayment: builder.mutation<{ order: Order; payment: any }, any>({
+    createOrderWithPayment: builder.mutation<{ order: Order; payment: number }, CreateOrderDto>({
       query: (orderData) => ({
         url: '/orders/create-with-payment',
         method: 'POST',
@@ -112,7 +113,7 @@ export const orderApi = createApi({
     }),
 
     // Get order statistics
-    getOrderStats: builder.query<any, number | void>({
+    getOrderStats: builder.query<number, number | void>({
       query: (restaurantId) => 
         restaurantId 
           ? `/orders/stats?restaurant_id=${restaurantId}`
@@ -120,7 +121,7 @@ export const orderApi = createApi({
     }),
 
     // Get revenue statistics
-    getRevenueStats: builder.query<any, { restaurantId?: number; days?: number }>({
+    getRevenueStats: builder.query<number, { restaurantId?: number; days?: number }>({
       query: ({ restaurantId, days = 30 }) => {
         let url = `/orders/revenue?days=${days}`;
         if (restaurantId) url += `&restaurant_id=${restaurantId}`;
@@ -129,7 +130,7 @@ export const orderApi = createApi({
     }),
 
     // Search orders
-    searchOrders: builder.query<Order[], { query: string; filters?: any }>({
+    searchOrders: builder.query<Order[], { query: string; filters?: string }>({
       query: ({ query, filters }) => ({
         url: '/orders/search',
         method: 'POST',

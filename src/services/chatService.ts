@@ -1,6 +1,6 @@
 // src/services/chatService.ts
 import api from './api';
-import { webSocketService } from './websocketService';
+import { webSocketService } from './socketService';
 
 export interface Message {
   id: number;
@@ -47,7 +47,7 @@ export const ChatService = {
   },
 
   // WebSocket methods
-  joinChat: (orderId: number, userId: number, userType: 'customer' | 'rider') => {
+  joinChat: (orderId: number, userId: number, UserRole: 'customer' | 'rider') => {
     webSocketService.joinOrderRoom(orderId);
     // Auto-subscribe to chat
     webSocketService.on('chat-message', (data) => {

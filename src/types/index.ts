@@ -9,6 +9,14 @@ export interface User {
   updated_at: Date;
 }
 
+export interface UpdateUser {
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+}
+
+//UserRole enum without decorator syntax
 export enum UserRole {
   SuperAdmin = 'super_admin',
   RestaurantOwner = 'restaurant_owner',
@@ -17,7 +25,148 @@ export enum UserRole {
   Rider = 'rider',
   Customer = 'customer',
 }
+// Restaurant Owner Service Types
+export interface CreateRestaurantData {
+  name: string;
+  address: string;
+  phone: string;
+  logo_url?: string;
+  description?: string;
+  categories?: string[];
+  owner_id: number;
+}
 
+export interface UpdateRestaurantData {
+  name?: string;
+  address?: string;
+  phone?: string;
+  logo_url?: string;
+  description?: string;
+  categories?: string[];
+  isOpen?: boolean;
+}
+
+export interface CreateMenuItemData {
+  name: string;
+  description: string;
+  price: number;
+  category_id: number;
+  preparation_time: number;
+  is_available: boolean;
+  image_url?: string;
+}
+
+export interface UpdateMenuItemData {
+  name?: string;
+  description?: string;
+  price?: number;
+  category_id?: number;
+  preparation_time?: number;
+  is_available?: boolean;
+  image_url?: string;
+}
+
+export interface CreateMenuCategoryData {
+  name: string;
+  description?: string;
+  restaurant_id: number;
+  isActive?: boolean;
+}
+
+export interface UpdateMenuCategoryData {
+  name?: string;
+  description?: string;
+  isActive?: boolean;
+}
+
+export interface RestaurantStaffMember {
+  staff_id: number;
+  user: User;
+  restaurant: Restaurant;
+  role: 'manager' | 'chef' | 'cashier' | 'waiter';
+  position: string;
+  hired_date: string;
+  is_active: boolean;
+}
+
+export interface AddStaffMemberData {
+  user_id: number;
+  restaurant_id: number;
+  role: 'manager' | 'chef' | 'cashier' | 'waiter';
+  position: string;
+}
+
+export interface RestaurantStats {
+  totalOrders: number;
+  todayOrders: number;
+  pendingOrders: number;
+  preparingOrders: number;
+  readyOrders: number;
+  deliveredOrders: number;
+  revenue: number;
+  averageRating: number;
+  popularItems: MenuItem[];
+}
+
+export interface RevenueStats {
+  dailyStats: Array<{
+    date: string;
+    revenue: number;
+    orders: number;
+  }>;
+  totalRevenue: number;
+  totalOrders: number;
+  averageOrderValue: number;
+  revenueChangePercentage: number;
+}
+
+export interface PaymentStats {
+  total: number;
+  paid: number;
+  pending: number;
+  failed: number;
+  refunded: number;
+  paidPercentage: number;
+  totalRevenue: number;
+  paymentMethods: Record<string, number>;
+}
+
+export interface RiderRequest {
+  request_id: number;
+  rider: Rider;
+  restaurant: Restaurant;
+  status: 'pending' | 'approved' | 'rejected' | 'suspended';
+  request_date: string;
+  approved_date?: string;
+  rejected_date?: string;
+  suspended_date?: string;
+  rejection_reason?: string;
+  suspension_reason?: string;
+  reviewed_by?: User;
+}
+
+export interface RiderPerformance {
+  rider_id: number;
+  total_deliveries: number;
+  on_time_deliveries: number;
+  late_deliveries: number;
+  average_delivery_time: number; // in minutes
+  acceptance_rate: number;
+  cancellation_rate: number;
+  customer_rating: number;
+  completion_rate: number;
+  performance_score: number;
+}
+
+export interface RiderStats {
+  total_riders: number;
+  active_riders: number;
+  pending_requests: number;
+  approved_riders: number;
+  suspended_riders: number;
+  average_rating: number;
+  top_performers: RiderPerformance[];
+}
 // ============= AUTH TYPES =============
 export interface LoginRequest {
   email: string;
@@ -180,6 +329,40 @@ export interface OrderStatusLog {
   changed_at: Date;
 }
 
+// FIXED: Update CreateOrderDto to match backend
+export interface CreateOrderDto {
+  customer_id: number; // Changed from customerId
+  restaurant_id: number; // Changed from restaurantId
+  delivery_address: string; // Changed from deliveryAddress
+  notes?: string;
+  items: Array<{
+    menu_item_id: number; // Changed from menuItemId
+    quantity: number;
+    special_instructions?: string; // Changed from specialInstructions
+  }>;
+  delivery_latitude?: number; // Changed from deliveryLatitude
+  delivery_longitude?: number; // Changed from deliveryLongitude
+}
+
+// NEW: Add CreateOrderWithPaymentData interface
+export interface CreateOrderWithPaymentData {
+  customer_id: number;
+  restaurant_id: number;
+  delivery_address: string;
+  notes?: string;
+  items: Array<{
+    menu_item_id: number;
+    quantity: number;
+    special_instructions?: string;
+  }>;
+  delivery_latitude?: number;
+  delivery_longitude?: number;
+  email: string;
+  amount: number;
+  callback_url: string;
+  payment_method?: 'card' | 'mobile_money';
+}
+
 // ============= PAYMENT TYPES =============
 export interface Payment {
   payment_id: number;
@@ -193,7 +376,7 @@ export interface Payment {
   transaction_id?: string;
   payment_reference?: string;
   authorization_url?: string;
-  gateway_response?: any;
+  gateway_response?: string;
   failure_reason?: string;
   paid_at?: Date;
   failed_at?: Date;
@@ -230,25 +413,154 @@ export interface Cart {
 }
 
 // ============= WEBSOCKET TYPES =============
-export interface SocketEvent {
-  type: string;
-  payload: any;
+export interface WebSocketUser {
+  user_id: number;
+  name: string;
+  email: string;
+  role: UserRole;
+  avatar?: string;
 }
 
-export interface RiderLocationUpdate {
-  riderId: number;
-  orderId: number;
+export interface LocationUpdate {
   latitude: number;
   longitude: number;
   address?: string;
-  timestamp: Date;
+  timestamp: string;
+  accuracy?: number;
+  speed?: number;
+  heading?: number;
 }
 
 export interface OrderUpdateEvent {
   orderId: number;
-  type: 'riderAssigned' | 'statusUpdate' | 'orderRated' | 'orderDelivered' | 'chatCleared' | 'paymentUpdate';
-  data: any;
+  status: OrderStatus;
+  updatedAt: string;
+  estimatedDeliveryTime?: string;
+  riderId?: number;
+  notes?: string;
 }
+
+export interface RiderAssignedEvent {
+  orderId: number;
+  riderId: number;
+  riderName: string;
+  riderPhone?: string;
+  riderEmail?: string;
+  assignedAt: string;
+  estimatedArrivalTime?: string;
+  vehicleType?: string;
+}
+
+export interface RiderLocationEvent {
+  riderId: number;
+  orderId?: number;
+  latitude: number;
+  longitude: number;
+  address?: string;
+  timestamp: string;
+  speed?: number;
+  heading?: number;
+}
+
+export interface ChatMessageEvent {
+  message_id: number;
+  orderId: number;
+  senderId: number;
+  senderType: 'customer' | 'rider';
+  content: string;
+  timestamp: string;
+  is_read: boolean;
+  attachments?: Array<{
+    type: 'image' | 'file';
+    url: string;
+    name: string;
+  }>;
+}
+
+export interface TypingIndicatorEvent {
+  orderId: number;
+  userId: number;
+  userType: 'customer' | 'rider';
+  isTyping: boolean;
+}
+
+export interface AssignmentTimeoutEvent {
+  orderId: number;
+  timeoutAt: string;
+  reason?: string;
+  assignmentAttempts: number;
+}
+
+export interface OrderRatedEvent {
+  orderId: number;
+  rating: number;
+  feedback?: string;
+  ratedAt: string;
+  ratedBy: 'customer' | 'rider';
+}
+
+export interface UnreadCountEvent {
+  orderId: number;
+  userId: number;
+  unreadCount: number;
+  lastMessageTime?: string;
+}
+
+export interface PaymentUpdateEvent {
+  orderId: number;
+  paymentStatus: PaymentStatus;
+  amountPaid: number;
+  paymentReference?: string;
+  updatedAt: string;
+}
+
+export interface OrderDeliveredEvent {
+  orderId: number;
+  deliveredAt: string;
+  riderId: number;
+  deliveryLatitude?: number;
+  deliveryLongitude?: number;
+  customerConfirmed: boolean;
+  riderConfirmed: boolean;
+}
+
+// WebSocket Event Map Types
+export type WebSocketEventType =
+  | 'order-update'
+  | 'rider-assigned'
+  | 'rider-location'
+  | 'chat-message'
+  | 'typing-indicator'
+  | 'assignment-timeout'
+  | 'order-rated'
+  | 'unread-count'
+  | 'payment-update'
+  | 'order-delivered'
+  | 'order-accepted'
+  | 'order-ready'
+  | 'order-picked-up'
+  | 'connect'
+  | 'disconnect'
+  | 'error';
+
+export type WebSocketEventDataMap = {
+  'order-update': OrderUpdateEvent;
+  'rider-assigned': RiderAssignedEvent;
+  'rider-location': RiderLocationEvent;
+  'chat-message': ChatMessageEvent;
+  'typing-indicator': TypingIndicatorEvent;
+  'assignment-timeout': AssignmentTimeoutEvent;
+  'order-rated': OrderRatedEvent;
+  'unread-count': UnreadCountEvent;
+  'payment-update': PaymentUpdateEvent;
+  'order-delivered': OrderDeliveredEvent;
+  'order-accepted': { orderId: number; acceptedAt: string };
+  'order-ready': { orderId: number; readyAt: string };
+  'order-picked-up': { orderId: number; pickedUpAt: string; riderId: number };
+  'connect': void;
+  'disconnect': void;
+  'error': Error;
+};
 
 // ============= UI TYPES =============
 export interface Notification {

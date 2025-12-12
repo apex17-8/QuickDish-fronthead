@@ -1,10 +1,11 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { Rider } from '../../types';
+import { BACKEND_URL } from '../../utils/utils';
 
 export const riderApi = createApi({
   reducerPath: 'riderApi',
   baseQuery: fetchBaseQuery({ 
-    baseUrl: import.meta.env.VITE_API_BASE_URL,
+    baseUrl: BACKEND_URL,
     prepareHeaders: (headers) => {
       const token = localStorage.getItem('token');
       if (token) {
@@ -53,27 +54,27 @@ export const riderApi = createApi({
     }),
 
     // Get rider location history
-    getRiderLocationHistory: builder.query<any[], number>({
+    getRiderLocationHistory: builder.query<number[], number>({
       query: (riderId) => `/rider-location/${riderId}/history`,
     }),
 
     // Get rider live location
-    getRiderLiveLocation: builder.query<any, number>({
+    getRiderLiveLocation: builder.query<number, number>({
       query: (riderId) => `/rider-location/${riderId}/live`,
     }),
 
     // Get rider statistics
-    getRiderStats: builder.query<any, number>({
+    getRiderStats: builder.query<number, number>({
       query: (riderId) => `/riders/${riderId}/stats`,
     }),
 
     // Get rider earnings
-    getRiderEarnings: builder.query<any, { riderId: number; period: 'day' | 'week' | 'month' }>({
+    getRiderEarnings: builder.query<number, { riderId: number; period: 'day' | 'week' | 'month' }>({
       query: ({ riderId, period }) => `/riders/${riderId}/earnings?period=${period}`,
     }),
 
     // Get assigned orders
-    getAssignedOrders: builder.query<any[], number>({
+    getAssignedOrders: builder.query<number[], number>({
       query: (riderId) => `/riders/${riderId}/assigned-orders`,
       providesTags: ['Riders'],
     }),
@@ -99,7 +100,7 @@ export const riderApi = createApi({
     }),
 
     // Get rider reviews
-    getRiderReviews: builder.query<any[], number>({
+    getRiderReviews: builder.query<number[], number>({
       query: (riderId) => `/riders/${riderId}/reviews`,
     }),
   }),

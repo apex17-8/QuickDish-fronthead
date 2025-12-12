@@ -9,7 +9,6 @@ import {
   AlertCircle,
   BarChart3,
   Download,
-  Filter,
   Search,
   Eye,
   Edit,
@@ -36,14 +35,14 @@ export const AdminDashboard: React.FC = () => {
     pendingOrders: 0,
     activeRiders: 0,
   });
-  const [recentActivities, setRecentActivities] = useState<any[]>([]);
+  const [recentActivities, setRecentActivities] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchAdminData();
-  }, []);
+  });
 
   const fetchAdminData = async () => {
     try {
@@ -64,8 +63,9 @@ export const AdminDashboard: React.FC = () => {
         pendingOrders: orderStats.pending,
         activeRiders: allUsers.filter(u => u.role === UserRole.Rider).length,
       });
-      setRecentActivities(activities);
+     setRecentActivities(activities.map(activity => JSON.stringify(activity)));
     } catch (error) {
+      console.error(error);
       toast.error('Failed to load admin data');
     } finally {
       setIsLoading(false);
@@ -131,6 +131,9 @@ export const AdminDashboard: React.FC = () => {
       default: return 'gray';
     }
   };
+const role = UserRole.Customer;
+const color = getRoleColor(role);
+console.log(color); // Output: blue
 
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -188,6 +191,7 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                   <div className="flex space-x-2">
                     <select
+                    title='Filter by Role'
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                       value={selectedRole}
                       onChange={(e) => setSelectedRole(e.target.value)}
@@ -247,7 +251,7 @@ export const AdminDashboard: React.FC = () => {
                             </td>
                             <td className="py-4">{user.email}</td>
                             <td className="py-4">
-                              <Badge variant={getRoleColor(user.role)}>
+                              <Badge variant="success">
                                 {user.role.replace('_', ' ')}
                               </Badge>
                             </td>
@@ -322,7 +326,7 @@ export const AdminDashboard: React.FC = () => {
               <CardContent>
                 <div className="space-y-4">
                   {recentActivities.map((activity) => (
-                    <div key={activity.id} className="flex items-start">
+                    <div key={(activity as unknown as{id: number}).id} className="flex items-start">
                       <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-3">
                         <Activity className="w-4 h-4 text-blue-600" />
                       </div>

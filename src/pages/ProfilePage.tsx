@@ -7,9 +7,9 @@ import {
   Lock,
   CreditCard,
   Star,
-  History,
   Bell,
   Shield,
+  Badge,
   Camera,
   Save,
   Edit,
@@ -18,7 +18,6 @@ import {
 import { Layout } from '../components/layout/layout';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/Tabs';
 import { useAuth } from '../hooks/useAuth';
 import { UserService } from '../services/userService';
 import toast from 'react-hot-toast';
@@ -53,6 +52,7 @@ export const ProfilePage: React.FC = () => {
       setIsEditing(false);
       toast.success('Profile updated successfully');
     } catch (error) {
+      console.error(error);
       toast.error('Failed to update profile');
     }
   };
@@ -73,6 +73,7 @@ export const ProfilePage: React.FC = () => {
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
       toast.success('Password changed successfully');
     } catch (error) {
+      console.error(error);
       toast.error('Failed to change password');
     }
   };
@@ -111,7 +112,9 @@ export const ProfilePage: React.FC = () => {
                       <div className="w-24 h-24 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 flex items-center justify-center">
                         <User className="w-12 h-12 text-white" />
                       </div>
-                      <button className="absolute bottom-0 right-0 bg-white p-2 rounded-full shadow-md hover:shadow-lg">
+                      <button
+                      title='camera'
+                       className="absolute bottom-0 right-0 bg-white p-2 rounded-full shadow-md hover:shadow-lg">
                         <Camera className="w-4 h-4" />
                       </button>
                     </div>
@@ -192,6 +195,7 @@ export const ProfilePage: React.FC = () => {
                         </label>
                         {isEditing ? (
                           <input
+                          title='enter full name'
                             type="text"
                             value={formData.name}
                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -208,6 +212,7 @@ export const ProfilePage: React.FC = () => {
                         </label>
                         {isEditing ? (
                           <input
+                          title='enter email address'
                             type="email"
                             value={formData.email}
                             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -224,6 +229,7 @@ export const ProfilePage: React.FC = () => {
                         </label>
                         {isEditing ? (
                           <input
+                          title='enter phone number'
                             type="tel"
                             value={formData.phone}
                             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -240,6 +246,7 @@ export const ProfilePage: React.FC = () => {
                         </label>
                         {isEditing ? (
                           <textarea
+                          title='enter default address'
                             value={formData.address}
                             onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
@@ -269,6 +276,7 @@ export const ProfilePage: React.FC = () => {
                             Current Password
                           </label>
                           <input
+                          title='enter new password'
                             type="password"
                             value={passwordData.currentPassword}
                             onChange={(e) =>
@@ -282,6 +290,7 @@ export const ProfilePage: React.FC = () => {
                             New Password
                           </label>
                           <input
+                          title= 'enter current password'
                             type="password"
                             value={passwordData.newPassword}
                             onChange={(e) =>
@@ -295,6 +304,7 @@ export const ProfilePage: React.FC = () => {
                             Confirm New Password
                           </label>
                           <input
+                          title='confirm new password'
                             type="password"
                             value={passwordData.confirmPassword}
                             onChange={(e) =>
@@ -353,6 +363,7 @@ export const ProfilePage: React.FC = () => {
                           </div>
                           <label className="relative inline-flex items-center cursor-pointer">
                             <input
+                            title='toggle notification'
                               type="checkbox"
                               checked={value}
                               onChange={() =>

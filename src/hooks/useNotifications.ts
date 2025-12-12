@@ -37,19 +37,19 @@ export const useNotifications = () => {
     );
   };
 
-  const showSuccess = (title: string, message: string, options?: any) => {
+  const showSuccess = (title: string, message: string, options?: {duration?: number; action?: { label: string; onClick: () => void; }}) => {
     dispatch(addSuccessNotification({ title, message, ...options }));
   };
 
-  const showError = (title: string, message: string, options?: any) => {
+  const showError = (title: string, message: string, options?:{duration?: number; action?: { label: string; onClick: () => void; }}) => {
     dispatch(addErrorNotification({ title, message, ...options }));
   };
 
-  const showWarning = (title: string, message: string, options?: any) => {
+  const showWarning = (title: string, message: string, options?:{duration?: number; action?: { label: string; onClick: () => void; }}) => {
     dispatch(addWarningNotification({ title, message, ...options }));
   };
 
-  const showInfo = (title: string, message: string, options?: any) => {
+  const showInfo = (title: string, message: string, options?: {duration?: number; action?: { label: string; onClick: () => void; }}) => {
     dispatch(addInfoNotification({ title, message, ...options }));
   };
 

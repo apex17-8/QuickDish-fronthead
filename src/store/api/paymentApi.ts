@@ -1,10 +1,11 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { Payment } from '../../types';
+import { BACKEND_URL } from '../../utils/utils';
 
 export const paymentApi = createApi({
   reducerPath: 'paymentApi',
   baseQuery: fetchBaseQuery({ 
-    baseUrl: import.meta.env.VITE_API_BASE_URL,
+    baseUrl: BACKEND_URL,
     prepareHeaders: (headers) => {
       const token = localStorage.getItem('token');
       if (token) {
@@ -16,7 +17,7 @@ export const paymentApi = createApi({
   tagTypes: ['Payments'],
   endpoints: (builder) => ({
     // Initialize payment
-    initializePayment: builder.mutation<any, { orderId: number; amount: number; email: string }>({
+    initializePayment: builder.mutation<string, { orderId: number; amount: number; email: string }>({
       query: ({ orderId, amount, email }) => ({
         url: '/payments/initialize',
         method: 'POST',
@@ -25,7 +26,7 @@ export const paymentApi = createApi({
     }),
 
     // Verify payment
-    verifyPayment: builder.query<any, string>({
+    verifyPayment: builder.query<string, string>({
       query: (reference) => `/payments/verify?reference=${reference}`,
     }),
 
@@ -64,12 +65,12 @@ export const paymentApi = createApi({
     }),
 
     // Get payment methods
-    getPaymentMethods: builder.query<any[], void>({
+    getPaymentMethods: builder.query<string[], void>({
       query: () => '/payments/methods',
     }),
 
     // Add payment method
-    addPaymentMethod: builder.mutation<void, any>({
+    addPaymentMethod: builder.mutation<void, string>({
       query: (methodData) => ({
         url: '/payments/methods',
         method: 'POST',

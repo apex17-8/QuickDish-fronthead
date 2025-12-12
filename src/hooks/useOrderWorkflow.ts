@@ -1,26 +1,56 @@
-// src/hooks/useOrderWorkflow.ts - COMPLETE
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './useAuth';
-import { useWebSocket } from './useWebsockets';
+import { useWebSockets } from './useWebsockets'; // FIXED: Changed from useWebSocket to useWebSockets
 import { OrdersService } from '../services/ordersService';
-import { ChatService } from '../services/chatService';
 import { paymentService } from '../services/paymentService';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import type { 
+  Order, 
+  OrderStatus, 
+  Rider, 
+  Customer,
+  CreateOrderDto,
+  CreateOrderWithPaymentData 
+} from '../types';
+
+interface OrderUpdateData {
+  orderId: number;
+  type: 'statusUpdate' | 'riderAssigned' | 'paymentUpdate' | 'assignment-timeout';
+  status?: OrderStatus;
+  rider?: Rider;
+  order?: Order;
+}
+
+// FIXED: Updated to match backend DTO structure
+interface PlaceOrderData {
+  customer_id: number;
+  restaurant_id: number;
+  delivery_address: string;
+  items: Array<{
+    menu_item_id: number;
+    quantity: number;
+    special_instructions?: string;
+  }>;
+  notes?: string;
+  delivery_latitude?: number;
+  delivery_longitude?: number;
+}
+
+interface OrderWithTimer extends Order {
+  timer?: NodeJS.Timeout;
+}
 
 export const useOrderWorkflow = () => {
   const { user, customer, refreshUserData } = useAuth();
   const { 
     subscribeToOrder, 
-    shouldOpenChat, 
-    shouldRateOrder, 
-    shouldNotifyCustomerCare,
     sendMessage: sendChatMessage 
-  } = useWebSocket();
+  } = useWebSockets(); // FIXED: Changed from useWebSocket to useWebSockets
   
   const navigate = useNavigate();
   
-  const [activeOrders, setActiveOrders] = useState<any[]>([]);
+  const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [orderTimers, setOrderTimers] = useState<Map<number, NodeJS.Timeout>>(new Map());
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
@@ -34,12 +64,12 @@ export const useOrderWorkflow = () => {
         // Check if order still needs assignment
         const order = await OrdersService.getOrderById(orderId);
         
-        if (order.status === 'ready_for_pickup' && !order.rider) {
+        if (order.status === 'ready' && !order.rider) {
           // Mark as requiring manual assignment
           await OrdersService.updateOrder(orderId, { requires_manual_assignment: true });
           
           // Notify customer care
-          toast.error(`Order #${order.order_number} requires manual rider assignment`, {
+          toast.error(`Order #${order.order_id} requires manual rider assignment`, {
             duration: 10000,
             action: {
               label: 'View',
@@ -73,19 +103,23 @@ export const useOrderWorkflow = () => {
 
   // Subscribe to order updates and manage workflow
   const trackOrder = useCallback((orderId: number) => {
-    const unsubscribe = subscribeToOrder(orderId, async (data) => {
+    const unsubscribe = subscribeToOrder(orderId, async (data: OrderUpdateData) => {
       const { orderId: updatedOrderId, type, status, rider, order } = data;
       
       switch (type) {
         case 'statusUpdate':
           // Handle status changes
-          await handleStatusChange(updatedOrderId, status, rider || order?.rider);
+          if (status) {
+            await handleStatusChange(updatedOrderId, status, rider || order?.rider);
+          }
           break;
           
         case 'riderAssigned':
           // Clear timer when rider is assigned
           clearAssignmentTimer(updatedOrderId);
-          toast.success(`Rider ${rider?.user?.name} assigned to your order`);
+          if (rider?.user?.name) {
+            toast.success(`Rider ${rider.user.name} assigned to your order`);
+          }
           break;
           
         case 'assignment-timeout':
@@ -97,7 +131,7 @@ export const useOrderWorkflow = () => {
           break;
           
         case 'paymentUpdate':
-          if (data.status === 'success') {
+          if (data.status === 'paid') {
             toast.success('Payment confirmed! Your order is being processed.');
           }
           break;
@@ -107,7 +141,7 @@ export const useOrderWorkflow = () => {
     return unsubscribe;
   }, [subscribeToOrder, clearAssignmentTimer, user, navigate]);
 
-  const handleStatusChange = useCallback(async (orderId: number, status: string, rider?: any) => {
+  const handleStatusChange = useCallback(async (orderId: number, status: OrderStatus, rider?: Rider) => {
     try {
       // Get fresh order data
       const order = await OrdersService.getOrderById(orderId);
@@ -119,25 +153,27 @@ export const useOrderWorkflow = () => {
             ? { ...order, rider: rider || order.rider }
             : o
         ).filter(o => 
-          ['pending', 'accepted', 'preparing', 'ready_for_pickup', 'assigned', 'picked_up'].includes(o.status)
+          ['pending', 'accepted', 'preparing', 'ready', 'on_the_way', 'awaiting_confirmation'].includes(o.status)
         )
       );
 
       // Handle workflow actions
       switch (status) {
-        case 'ready_for_pickup':
+        case 'ready':
           // Start 5-minute timer for auto-assignment
           startAssignmentTimer(orderId, new Date(order.created_at));
           toast.info('Order is ready for pickup. Finding nearest rider...');
           break;
 
-        case 'assigned':
+        case 'on_the_way':
           // Rider assigned, clear timer
           clearAssignmentTimer(orderId);
-          toast.success(`Rider ${rider?.user?.name} is on the way to the restaurant`);
+          if (rider?.user?.name) {
+            toast.success(`Rider ${rider.user.name} is on the way to the restaurant`);
+          }
           break;
 
-        case 'picked_up':
+        case 'awaiting_confirmation':
           // Open chat automatically if user is customer or rider
           if (user && (user.role === 'customer' || user.role === 'rider')) {
             // Auto-navigate to chat after 2 seconds
@@ -170,8 +206,6 @@ export const useOrderWorkflow = () => {
             // Update customer loyalty points
             if (customer) {
               try {
-                // Add loyalty points for completed order
-                await OrdersService.submitRating(orderId, 0); // 0 means not rated yet
                 await refreshUserData();
               } catch (error) {
                 console.error('Failed to update loyalty points:', error);
@@ -195,51 +229,59 @@ export const useOrderWorkflow = () => {
     }
   }, [user, customer, navigate, startAssignmentTimer, clearAssignmentTimer, refreshUserData]);
 
-  // Place new order with payment
-  const placeOrder = useCallback(async (orderData: any, paymentMethod: string = 'card') => {
-    if (!customer && user?.role === 'customer') {
-      toast.error('Customer profile not found. Please contact support.');
+  // Place new order with payment - FIXED: Accepts correct data structure
+  const placeOrder = useCallback(async (orderData: PlaceOrderData, paymentMethod: string = 'card'): Promise<Order | null> => {
+    if (!user) {
+      toast.error('Please login to continue');
       return null;
     }
 
+    // Get customer ID properly
+    const customerId = customer?.customer_id || user.user_id;
+    
     setIsPlacingOrder(true);
     
     try {
-      // Prepare complete order data
-      const completeOrderData = {
-        ...orderData,
-        customer_id: customer?.customer_id,
-        restaurant_id: orderData.restaurantId || orderData.restaurant_id,
-        delivery_address: orderData.deliveryAddress || orderData.delivery_address,
-        items: orderData.items?.map((item: any) => ({
-          menu_item_id: item.menu_item.menu_item_id,
+      // Prepare complete order data - Convert to CreateOrderDto format
+      const createOrderDto: CreateOrderDto = {
+        customerId: customerId,
+        restaurantId: orderData.restaurant_id,
+        deliveryAddress: orderData.delivery_address,
+        notes: orderData.notes,
+        orderItems: orderData.items.map(item => ({
+          menuItemId: item.menu_item_id,
           quantity: item.quantity,
-          special_instructions: item.specialInstructions,
-        })) || [],
+          specialInstructions: item.special_instructions,
+        })),
       };
 
-      let order;
+      let order: Order;
       
       if (paymentMethod === 'cash') {
         // Create order without payment (cash on delivery)
-        order = await OrdersService.createOrder(completeOrderData);
-        toast.success(`Order #${order.order_number} placed successfully! Pay on delivery.`);
+        order = await OrdersService.createOrder(createOrderDto);
+        toast.success(`Order #${order.order_id} placed successfully! Pay on delivery.`);
       } else {
         // Create order with payment
-        const result = await OrdersService.createOrderWithPayment({
-          ...completeOrderData,
-          payment_method: paymentMethod,
-          customer_email: user?.email,
-        });
+        const createWithPaymentData: CreateOrderWithPaymentData = {
+          ...createOrderDto,
+          paymentMethod: paymentMethod as 'card' | 'mobile_money',
+          paymentDetails: {
+            email: user.email,
+            callbackUrl: `${window.location.origin}/payment/callback`,
+          }
+        };
+
+        const result = await OrdersService.createOrderWithPayment(createWithPaymentData);
         
         order = result.order;
         
-        if (result.payment?.authorization_url) {
+        if (result.payment?.authorizationUrl) {
           // Redirect to payment page
-          window.open(result.payment.authorization_url, '_blank');
+          window.open(result.payment.authorizationUrl, '_blank');
           toast.success('Redirecting to payment page...');
         } else {
-          toast.success(`Order #${order.order_number} placed successfully!`);
+          toast.success(`Order #${order.order_id} placed successfully!`);
         }
       }
       
@@ -249,13 +291,14 @@ export const useOrderWorkflow = () => {
       // Start tracking this order
       trackOrder(order.order_id);
       
-      // Clear cart
-      localStorage.removeItem('cart');
-      
       return order;
-    } catch (error: any) {
-      const message = error.response?.data?.message || error.message || 'Failed to place order';
-      toast.error(message);
+    } catch (error: unknown) {
+      let errorMessage = 'Failed to place order';
+      if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = (error as any).message || errorMessage;
+      }
+      console.error('Order placement error:', error);
+      toast.error(errorMessage);
       return null;
     } finally {
       setIsPlacingOrder(false);
@@ -275,25 +318,25 @@ export const useOrderWorkflow = () => {
       const order = await OrdersService.getOrderById(orderId);
       
       const paymentData = {
-        order_id: orderId,
+        orderId: orderId,
         amount: order.total_price,
         email: user.email,
-        payment_method: paymentMethod,
-        callback_url: `${window.location.origin}/payment/callback`,
+        paymentMethod: paymentMethod as 'card' | 'mobile_money' | 'cash',
+        callbackUrl: `${window.location.origin}/payment/callback`,
       };
 
       const payment = await paymentService.initializePayment(paymentData);
       
-      if (payment.authorization_url) {
+      if (payment.authorizationUrl) {
         // Open payment page in new tab
-        window.open(payment.authorization_url, '_blank');
+        window.open(payment.authorizationUrl, '_blank');
         toast.success('Redirecting to payment page...');
         
         // Start polling for payment confirmation
         const pollPayment = setInterval(async () => {
           try {
-            const verified = await paymentService.verifyPayment(payment.reference);
-            if (verified.status === 'success') {
+            const verified = await paymentService.verifyPayment(payment.paymentReference);
+            if (verified.success) {
               clearInterval(pollPayment);
               toast.success('Payment confirmed!');
               
@@ -307,8 +350,12 @@ export const useOrderWorkflow = () => {
       }
       
       return payment;
-    } catch (error: any) {
-      toast.error(error.message || 'Payment initialization failed');
+    } catch (error: unknown) {
+      let errorMessage = 'Payment initialization failed';
+      if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = (error as any).message || errorMessage;
+      }
+      toast.error(errorMessage);
       return null;
     } finally {
       setIsProcessingPayment(false);
@@ -316,7 +363,7 @@ export const useOrderWorkflow = () => {
   }, [user]);
 
   // Rate order and close chat
-  const rateOrder = useCallback(async (orderId: number, rating: number, feedback?: string) => {
+  const rateOrder = useCallback(async (orderId: number, rating: number, feedback?: string): Promise<boolean> => {
     try {
       await OrdersService.submitRating(orderId, rating, feedback);
       
@@ -328,8 +375,6 @@ export const useOrderWorkflow = () => {
       // Add loyalty points
       if (customer && rating >= 4) {
         try {
-          // Add points for good rating
-          await OrdersService.getOrderById(orderId); // This will trigger loyalty points in backend
           await refreshUserData();
         } catch (error) {
           console.error('Failed to add loyalty points:', error);
@@ -344,8 +389,12 @@ export const useOrderWorkflow = () => {
       }
       
       return true;
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to submit rating');
+    } catch (error: unknown) {
+      let errorMessage = 'Failed to submit rating';
+      if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = (error as any).message || errorMessage;
+      }
+      toast.error(errorMessage);
       return false;
     }
   }, [customer, navigate, refreshUserData]);
@@ -356,7 +405,7 @@ export const useOrderWorkflow = () => {
       try {
         const orders = await OrdersService.getCustomerOrders(customer.customer_id);
         const active = orders.filter(order => 
-          ['pending', 'accepted', 'preparing', 'ready_for_pickup', 'assigned', 'picked_up'].includes(order.status)
+          ['pending', 'accepted', 'preparing', 'ready', 'on_the_way', 'awaiting_confirmation'].includes(order.status)
         );
         
         setActiveOrders(active);
@@ -366,7 +415,7 @@ export const useOrderWorkflow = () => {
           trackOrder(order.order_id);
           
           // Start timer for ready orders without rider
-          if (order.status === 'ready_for_pickup' && !order.rider) {
+          if (order.status === 'ready' && !order.rider) {
             startAssignmentTimer(order.order_id, new Date(order.created_at));
           }
         });
@@ -377,12 +426,12 @@ export const useOrderWorkflow = () => {
   }, [customer, trackOrder, startAssignmentTimer]);
 
   // For riders: Get available orders
-  const getAvailableOrders = useCallback(async () => {
+  const getAvailableOrders = useCallback(async (): Promise<Order[]> => {
     if (user?.role === 'rider') {
       try {
         const orders = await OrdersService.getReadyOrders();
-        return orders.filter((order: any) => 
-          order.status === 'ready_for_pickup' && 
+        return orders.filter(order => 
+          order.status === 'ready' && 
           !order.rider &&
           !order.requires_manual_assignment
         );
@@ -395,7 +444,7 @@ export const useOrderWorkflow = () => {
   }, [user]);
 
   // For riders: Accept order
-  const acceptOrderAsRider = useCallback(async (orderId: number) => {
+  const acceptOrderAsRider = useCallback(async (orderId: number): Promise<boolean> => {
     if (!user || user.role !== 'rider') {
       toast.error('Only riders can accept orders');
       return false;
@@ -403,7 +452,7 @@ export const useOrderWorkflow = () => {
 
     try {
       await OrdersService.assignRider(orderId, user.user_id);
-      await OrdersService.updateOrderStatus(orderId, 'assigned');
+      await OrdersService.updateOrderStatus(orderId, 'on_the_way');
       
       toast.success('Order accepted! Please proceed to the restaurant.');
       
@@ -411,14 +460,18 @@ export const useOrderWorkflow = () => {
       trackOrder(orderId);
       
       return true;
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to accept order');
+    } catch (error: unknown) {
+      let errorMessage = 'Failed to accept order';
+      if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = (error as any).message || errorMessage;
+      }
+      toast.error(errorMessage);
       return false;
     }
   }, [user, trackOrder]);
 
   // For customer care: Manually assign rider
-  const manuallyAssignRider = useCallback(async (orderId: number, riderId: number) => {
+  const manuallyAssignRider = useCallback(async (orderId: number, riderId: number): Promise<boolean> => {
     if (!user || (user.role !== 'customer_care' && user.role !== 'super_admin')) {
       toast.error('Only customer care can manually assign riders');
       return false;
@@ -426,17 +479,51 @@ export const useOrderWorkflow = () => {
 
     try {
       await OrdersService.assignRider(orderId, riderId);
-      await OrdersService.updateOrderStatus(orderId, 'assigned');
+      await OrdersService.updateOrderStatus(orderId, 'on_the_way');
       
       toast.success('Rider assigned manually');
       clearAssignmentTimer(orderId);
       
       return true;
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to assign rider');
+    } catch (error: unknown) {
+      let errorMessage = 'Failed to assign rider';
+      if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = (error as any).message || errorMessage;
+      }
+      toast.error(errorMessage);
       return false;
     }
   }, [user, clearAssignmentTimer]);
+
+  // Helper functions
+  const shouldOpenChat = useCallback((orderStatus: OrderStatus, riderAssigned: boolean): boolean => {
+    return (orderStatus === 'on_the_way' || orderStatus === 'awaiting_confirmation') && riderAssigned;
+  }, []);
+
+  const shouldRateOrder = useCallback((orderStatus: OrderStatus, isRated: boolean): boolean => {
+    return orderStatus === 'delivered' && !isRated;
+  }, []);
+
+  const shouldNotifyCustomerCare = useCallback((orderStatus: OrderStatus, createdAt: Date, assignmentAttempts: number): boolean => {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    return orderStatus === 'ready' && 
+           createdAt <= fiveMinutesAgo && 
+           assignmentAttempts >= 2;
+  }, []);
+
+  const getOrderStatusText = useCallback((status: OrderStatus): string => {
+    const statusMap: Record<OrderStatus, string> = {
+      'pending': 'Order placed',
+      'accepted': 'Restaurant accepted',
+      'preparing': 'Preparing your food',
+      'ready': 'Ready for pickup',
+      'on_the_way': 'On the way',
+      'awaiting_confirmation': 'Awaiting confirmation',
+      'delivered': 'Delivered',
+      'cancelled': 'Cancelled',
+    };
+    return statusMap[status] || status;
+  }, []);
 
   // Initialize on mount
   useEffect(() => {
@@ -463,24 +550,9 @@ export const useOrderWorkflow = () => {
     acceptOrderAsRider,
     manuallyAssignRider,
     loadActiveOrders,
-    shouldOpenChat: (orderStatus: string, riderAssigned: boolean) => 
-      shouldOpenChat(orderStatus, riderAssigned),
-    shouldRateOrder: (orderStatus: string, isRated: boolean) => 
-      shouldRateOrder(orderStatus, isRated),
-    shouldNotifyCustomerCare: (orderStatus: string, createdAt: Date, assignmentAttempts: number) =>
-      shouldNotifyCustomerCare(orderStatus, createdAt, assignmentAttempts),
-    getOrderStatusText: (status: string) => {
-      const statusMap: Record<string, string> = {
-        'pending': 'Order placed',
-        'accepted': 'Restaurant accepted',
-        'preparing': 'Preparing your food',
-        'ready_for_pickup': 'Ready for pickup',
-        'assigned': 'Rider assigned',
-        'picked_up': 'On the way',
-        'delivered': 'Delivered',
-        'cancelled': 'Cancelled',
-      };
-      return statusMap[status] || status;
-    },
+    shouldOpenChat,
+    shouldRateOrder,
+    shouldNotifyCustomerCare,
+    getOrderStatusText,
   };
 };

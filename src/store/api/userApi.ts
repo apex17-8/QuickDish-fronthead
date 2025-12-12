@@ -1,86 +1,73 @@
+// src/redux/apis/userApi.ts
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { User, UserRole } from '../../types';
+import type { User, UserRole, ApiResponse } from '../../types';
+import { BACKEND_URL } from '../../utils/utils';
 
 export const userApi = createApi({
   reducerPath: 'userApi',
-  baseQuery: fetchBaseQuery({ 
-    baseUrl: import.meta.env.VITE_API_BASE_URL,
+  baseQuery: fetchBaseQuery({
+    baseUrl: BACKEND_URL,
     prepareHeaders: (headers) => {
       const token = localStorage.getItem('token');
-      if (token) {
-        headers.set('Authorization', `Bearer ${token}`);
-      }
+      if (token) headers.set('Authorization', `Bearer ${token}`);
       return headers;
     },
   }),
   tagTypes: ['Users'],
   endpoints: (builder) => ({
-    // Get all users (admin only)
     getAllUsers: builder.query<User[], void>({
       query: () => '/users',
+      transformResponse: (res: ApiResponse<User[]>) => {
+        if (!res.success) throw new Error(res.error || 'Failed to fetch users');
+        return res.data || [];
+      },
       providesTags: ['Users'],
     }),
 
-    // Get user by ID
     getUserById: builder.query<User, number>({
       query: (id) => `/users/${id}`,
+      transformResponse: (res: ApiResponse<User>) => {
+        if (!res.success) throw new Error(res.error || 'User not found');
+        return res.data!;
+      },
       providesTags: (_result, _error, id) => [{ type: 'Users', id }],
     }),
 
-    // Get users by role
-    getUsersByRole: builder.query<User[], UserRole>({
-      query: (role) => `/users/role/${role}`,
-      providesTags: ['Users'],
-    }),
-
-    // Create user (admin only)
     createUser: builder.mutation<User, Partial<User>>({
       query: (userData) => ({
         url: '/users',
         method: 'POST',
         body: userData,
       }),
+      transformResponse: (res: ApiResponse<User>) => {
+        if (!res.success) throw new Error(res.error || 'Failed to create user');
+        return res.data!;
+      },
       invalidatesTags: ['Users'],
     }),
 
-    // Update user
     updateUser: builder.mutation<User, { id: number; userData: Partial<User> }>({
       query: ({ id, userData }) => ({
         url: `/users/${id}`,
         method: 'PATCH',
         body: userData,
       }),
+      transformResponse: (res: ApiResponse<User>) => {
+        if (!res.success) throw new Error(res.error || 'Failed to update user');
+        return res.data!;
+      },
       invalidatesTags: (_result, _error, { id }) => [{ type: 'Users', id }],
     }),
 
-    // Delete user
     deleteUser: builder.mutation<void, number>({
       query: (id) => ({
         url: `/users/${id}`,
         method: 'DELETE',
       }),
+      transformResponse: (res: ApiResponse<void>) => {
+        if (!res.success) throw new Error(res.error || 'Failed to delete user');
+      },
       invalidatesTags: ['Users'],
-    }),
-
-    // Update user role
-    updateUserRole: builder.mutation<User, { id: number; role: UserRole }>({
-      query: ({ id, role }) => ({
-        url: `/users/${id}/role`,
-        method: 'PATCH',
-        body: { role },
-      }),
-      invalidatesTags: (_result, _error, { id }) => [{ type: 'Users', id }],
-    }),
-
-    // Search users
-    searchUsers: builder.query<User[], string>({
-      query: (query) => `/users/search?q=${query}`,
-      providesTags: ['Users'],
-    }),
-
-    // Get user statistics
-    getUserStats: builder.query<any, void>({
-      query: () => '/users/stats',
     }),
   }),
 });
@@ -88,11 +75,9 @@ export const userApi = createApi({
 export const {
   useGetAllUsersQuery,
   useGetUserByIdQuery,
-  useGetUsersByRoleQuery,
   useCreateUserMutation,
   useUpdateUserMutation,
   useDeleteUserMutation,
-  useUpdateUserRoleMutation,
-  useSearchUsersQuery,
-  useGetUserStatsQuery,
 } = userApi;
+
+export type { User, UserRole };

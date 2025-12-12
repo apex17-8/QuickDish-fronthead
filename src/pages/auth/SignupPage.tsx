@@ -68,8 +68,8 @@ export const SignupPage: React.FC = () => {
       } else {
         toast.error(result.error || 'Signup failed');
       }
-    } catch (error: any) {
-      toast.error(error.message || 'Signup failed');
+    } catch (error: unknown) {
+      toast.error((error as Error).message || 'Signup failed');
     } finally {
       setIsLoading(false);
     }
@@ -156,10 +156,13 @@ export const SignupPage: React.FC = () => {
                   value={formData.role}
                   onChange={handleChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  title='select your account type'
                 >
                   <option value={UserRole.Customer}>Customer</option>
                   <option value={UserRole.Rider}>Rider</option>
                   <option value={UserRole.RestaurantOwner}>Restaurant Owner</option>
+                  <option value={UserRole.CustomerCare}>Customer Care</option>
+                  <option value={UserRole.SuperAdmin}>Admin</option>
                 </select>
               </div>
 

@@ -60,6 +60,7 @@ export const CartItem: React.FC<CartItemProps> = ({
             <p className="text-sm text-gray-500">KSh {item.menu_item.price}</p>
           </div>
           <button
+          title='Remove Item'
             onClick={() => onRemove(item.menu_item.menu_item_id)}
             className="text-red-500 hover:text-red-700"
           >
@@ -71,6 +72,7 @@ export const CartItem: React.FC<CartItemProps> = ({
         <div className="flex items-center justify-between mt-2">
           <div className="flex items-center space-x-2">
             <button
+            title='Decrease Quantity'
               onClick={() => handleQuantityChange(-1)}
               className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200"
             >
@@ -78,6 +80,7 @@ export const CartItem: React.FC<CartItemProps> = ({
             </button>
             <span className="w-8 text-center font-medium">{item.quantity}</span>
             <button
+            title='Increase Quantity'
               onClick={() => handleQuantityChange(1)}
               className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200"
             >
@@ -110,6 +113,7 @@ export const CartItem: React.FC<CartItemProps> = ({
                   Save
                 </Button>
                 <Button
+                title='Cancel Instructions'
                   size="sm"
                   variant="ghost"
                   onClick={() => {
@@ -123,6 +127,7 @@ export const CartItem: React.FC<CartItemProps> = ({
             </div>
           ) : (
             <button
+            title='Add Special Instructions'
               onClick={() => setShowInstructions(true)}
               className="text-sm text-orange-500 hover:text-orange-600"
             >

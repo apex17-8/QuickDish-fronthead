@@ -1,10 +1,11 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { Restaurant, MenuItem, RestaurantMenuCategory } from '../../types';
+import { BACKEND_URL } from '../../utils/utils';
 
 export const restaurantApi = createApi({
   reducerPath: 'restaurantApi',
   baseQuery: fetchBaseQuery({ 
-    baseUrl: import.meta.env.VITE_API_BASE_URL,
+    baseUrl: BACKEND_URL,
     prepareHeaders: (headers) => {
       const token = localStorage.getItem('token');
       if (token) {

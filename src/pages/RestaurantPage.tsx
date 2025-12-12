@@ -1,292 +1,386 @@
-// src/pages/dashboards/RestaurantPage.tsx
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { 
-  Building, Edit, Trash2, Package, Users, DollarSign, Star, 
-  MapPin, Phone, Menu, BarChart, Clock, TrendingUp, ChefHat, ShoppingBag 
+  Search, Filter, Star, Clock, MapPin, ChevronRight,
+  SlidersHorizontal, X, ChefHat, DollarSign, Truck, Shield
 } from 'lucide-react';
 import { Layout } from '../components/layout/layout';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { RestaurantCard } from '../components/food/RestaurantCard';
 import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/Tabs';
-import { useAuth } from '../hooks/useAuth';
-import { RestaurantOwnerService } from '../services/restaurantOwnerService';
+import { RestaurantService } from '../services/restaurantService';
 import toast from 'react-hot-toast';
+import type { Restaurant } from '../types';
 
 export const RestaurantPage: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
-  const [restaurant, setRestaurant] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [searchParams] = useSearchParams();
+  const searchQuery = searchParams.get('search') || '';
+  const categoryFilter = searchParams.get('category') || 'all';
   
-  const { user } = useAuth();
-  const navigate = useNavigate();
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState(searchQuery);
+  const [activeCategory, setActiveCategory] = useState(categoryFilter);
+  const [filters, setFilters] = useState({
+    rating: 0,
+    deliveryTime: '',
+    priceRange: [0, 5000] as [number, number],
+    isOpen: true,
+  });
+  const [showFilters, setShowFilters] = useState(false);
+  const [categories, setCategories] = useState<string[]>([]);
 
   useEffect(() => {
-    if (id) {
-      loadRestaurantData();
-    }
-  }, [id]);
+    loadRestaurants();
+    loadCategories();
+  }, [activeCategory, filters]);
 
-  const loadRestaurantData = async () => {
+  const loadRestaurants = async () => {
     setIsLoading(true);
     try {
-      const restaurantData = await RestaurantOwnerService.getRestaurantById(parseInt(id!));
-      setRestaurant(restaurantData);
+      const data = await RestaurantService.getAllRestaurants(1, 50, {
+        search: searchQuery,
+        category: activeCategory !== 'all' ? activeCategory : undefined,
+        rating: filters.rating > 0 ? filters.rating : undefined,
+        isOpen: filters.isOpen,
+        sortBy: 'rating',
+        sortOrder: 'desc'
+      });
+      setRestaurants(data.items);
     } catch (error: any) {
-      toast.error('Failed to load restaurant data');
-      navigate('/dashboard/restaurant');
+      console.error('Error loading restaurants:', error);
+      toast.error('Failed to load restaurants');
+      setRestaurants([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleEditRestaurant = () => {
-    navigate(`/dashboard/restaurant/${id}/edit`);
-  };
-
-  const handleDeleteRestaurant = async () => {
-    if (window.confirm('Are you sure you want to delete this restaurant?')) {
-      try {
-        await RestaurantOwnerService.deleteRestaurant(parseInt(id!));
-        toast.success('Restaurant deleted successfully');
-        navigate('/dashboard/restaurant');
-      } catch (error: any) {
-        toast.error('Failed to delete restaurant');
-      }
+  const loadCategories = async () => {
+    try {
+      const data = await RestaurantService.getAllCategories();
+      setCategories(['all', ...data]);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+      setCategories(['all', 'Burgers', 'Pizza', 'Coffee', 'Chinese', 'Italian']);
     }
   };
 
-  if (isLoading) {
-    return (
-      <Layout>
-        <div className="flex justify-center items-center min-h-screen">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
-        </div>
-      </Layout>
-    );
-  }
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchInput.trim()) {
+      window.location.href = `/restaurants?search=${encodeURIComponent(searchInput.trim())}`;
+    }
+  };
 
-  if (!restaurant) {
-    return (
-      <Layout>
-        <div className="container mx-auto px-4 py-8">
-          <Card className="text-center py-12">
-            <Building className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Restaurant Not Found</h3>
-            <Button onClick={() => navigate('/dashboard/restaurant')}>
-              Back to Restaurants
-            </Button>
-          </Card>
-        </div>
-      </Layout>
-    );
-  }
+  const handleCategoryChange = (category: string) => {
+    setActiveCategory(category);
+    if (category === 'all') {
+      window.location.href = '/restaurants';
+    } else {
+      window.location.href = `/restaurants?category=${encodeURIComponent(category)}`;
+    }
+  };
 
-  const stats = [
-    { label: 'Today Orders', value: '24', icon: ShoppingBag, change: '+12%', color: 'bg-blue-500' },
-    { label: 'Revenue', value: 'KES 12,450', icon: DollarSign, change: '+18%', color: 'bg-green-500' },
-    { label: 'Pending Orders', value: '8', icon: Clock, change: '+5%', color: 'bg-yellow-500' },
-    { label: 'Rating', value: restaurant.rating?.toFixed(1) || 'N/A', icon: Star, color: 'bg-purple-500' },
-  ];
+  const clearFilters = () => {
+    setFilters({
+      rating: 0,
+      deliveryTime: '',
+      priceRange: [0, 5000],
+      isOpen: true,
+    });
+    setActiveCategory('all');
+    setSearchInput('');
+    window.location.href = '/restaurants';
+  };
+
+  const featuredRestaurants = restaurants.slice(0, 4);
+  const allRestaurants = restaurants.slice(4);
 
   return (
     <Layout>
       <div className="container mx-auto px-4 py-8">
-        {/* Restaurant Header */}
+        {/* Hero Section */}
+        <div className="mb-10 text-center">
+          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+            Discover Amazing Restaurants
+          </h1>
+          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+            Order from the best restaurants in your area. Fast delivery, great prices, and amazing food!
+          </p>
+        </div>
+
+        {/* Search Bar */}
+        <div className="max-w-2xl mx-auto mb-8">
+          <form onSubmit={handleSearch} className="relative">
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <Input
+              type="text"
+              placeholder="Search for restaurants, cuisines, or dishes..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="pl-12 pr-24 py-6 text-lg border-2 border-gray-200 focus:border-orange-500 rounded-xl"
+            />
+            <Button
+              type="submit"
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-orange-500 hover:bg-orange-600 px-6 py-4"
+            >
+              Search
+            </Button>
+          </form>
+        </div>
+
+        {/* Filters */}
         <div className="mb-8">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-            <div>
-              <div className="flex items-center space-x-4">
-                <div className="w-16 h-16 rounded-lg bg-gray-200 flex items-center justify-center">
-                  {restaurant.logo_url ? (
-                    <img src={restaurant.logo_url} alt={restaurant.name} className="w-full h-full object-cover rounded-lg" />
-                  ) : (
-                    <Building className="w-8 h-8 text-gray-400" />
-                  )}
-                </div>
-                <div>
-                  <h1 className="text-3xl font-bold text-gray-900">{restaurant.name}</h1>
-                  <div className="flex items-center space-x-2 mt-2">
-                    <Badge variant={restaurant.is_active ? 'success' : 'danger'}>
-                      {restaurant.is_active ? 'Active' : 'Inactive'}
-                    </Badge>
-                    <span className="text-gray-600">{restaurant.cuisine || 'Various Cuisine'}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="flex space-x-3 mt-4 md:mt-0">
-              {user?.role === 'restaurant_owner' && (
-                <>
-                  <Button variant="outline" onClick={handleEditRestaurant}>
-                    <Edit className="w-4 h-4 mr-2" />
-                    Edit Restaurant
-                  </Button>
-                  <Button variant="outline" className="text-red-600" onClick={handleDeleteRestaurant}>
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete
-                  </Button>
-                </>
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
+            <div className="flex items-center gap-4 mb-4 md:mb-0">
+              <Button
+                variant="outline"
+                onClick={() => setShowFilters(!showFilters)}
+                className="flex items-center gap-2"
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                Filters
+              </Button>
+              {(activeCategory !== 'all' || searchQuery || filters.rating > 0) && (
+                <Button
+                  variant="ghost"
+                  onClick={clearFilters}
+                  className="flex items-center gap-2 text-red-600 hover:text-red-700"
+                >
+                  <X className="w-4 h-4" />
+                  Clear Filters
+                </Button>
               )}
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="flex items-center text-gray-600">
-              <MapPin className="w-4 h-4 mr-2" />
-              <span>{restaurant.address}</span>
-            </div>
-            <div className="flex items-center text-gray-600">
-              <Phone className="w-4 h-4 mr-2" />
-              <span>{restaurant.phone}</span>
-            </div>
-            <div className="flex items-center text-gray-600">
-              <Star className="w-4 h-4 mr-2 text-yellow-500" />
-              <span>Rating: {restaurant.rating?.toFixed(1) || 'N/A'}</span>
+            
+            <div className="text-gray-600">
+              Showing <span className="font-bold">{restaurants.length}</span> restaurants
             </div>
           </div>
-        </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {stats.map((stat, index) => (
-            <Card key={index}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">{stat.label}</p>
-                    <p className="text-2xl font-bold mt-2">{stat.value}</p>
-                    {stat.change && (
-                      <p className="text-sm text-green-600 mt-1">{stat.change} from yesterday</p>
-                    )}
-                  </div>
-                  <div className={`${stat.color} p-3 rounded-lg`}>
-                    <stat.icon className="w-6 h-6 text-white" />
+          {/* Categories */}
+          <div className="flex flex-wrap gap-2 mb-6">
+            {categories.map(category => (
+              <Badge
+                key={category}
+                variant={activeCategory === category ? 'default' : 'outline'}
+                className={`px-4 py-2 cursor-pointer transition-colors ${
+                  activeCategory === category 
+                    ? 'bg-orange-500 hover:bg-orange-600' 
+                    : 'hover:bg-gray-100'
+                }`}
+                onClick={() => handleCategoryChange(category)}
+              >
+                {category === 'all' ? 'All Categories' : category}
+              </Badge>
+            ))}
+          </div>
+
+          {/* Advanced Filters */}
+          {showFilters && (
+            <div className="bg-white border rounded-xl p-6 mb-6">
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Filter className="w-5 h-5" />
+                Filter Options
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Minimum Rating
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {[4, 3, 2, 1].map(rating => (
+                      <Button
+                        key={rating}
+                        type="button"
+                        variant={filters.rating === rating ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setFilters(prev => ({ ...prev, rating }))}
+                        className="flex items-center gap-1"
+                      >
+                        <Star className="w-4 h-4" />
+                        {rating}+
+                      </Button>
+                    ))}
+                    <Button
+                      type="button"
+                      variant={filters.rating === 0 ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setFilters(prev => ({ ...prev, rating: 0 }))}
+                    >
+                      Any
+                    </Button>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="menu">Menu</TabsTrigger>
-            <TabsTrigger value="staff">Staff</TabsTrigger>
-            <TabsTrigger value="orders">Orders</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Recent Activity</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="p-4 bg-gray-50 rounded-lg">
-                        <p className="font-medium">New order received</p>
-                        <p className="text-sm text-gray-600">Order #1234 - KES 1,250</p>
-                        <p className="text-xs text-gray-500 mt-1">2 hours ago</p>
-                      </div>
-                      <div className="p-4 bg-gray-50 rounded-lg">
-                        <p className="font-medium">Menu item added</p>
-                        <p className="text-sm text-gray-600">Added "Chicken Burger" to menu</p>
-                        <p className="text-xs text-gray-500 mt-1">5 hours ago</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-              <div>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Quick Actions</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <Button variant="outline" fullWidth onClick={() => navigate(`/dashboard/restaurant/${id}/menu`)}>
-                      <Menu className="w-4 h-4 mr-2" />
-                      Manage Menu
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Price Range
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      placeholder="Min"
+                      value={filters.priceRange[0]}
+                      onChange={(e) => setFilters(prev => ({ 
+                        ...prev, 
+                        priceRange: [Number(e.target.value), prev.priceRange[1]] 
+                      }))}
+                      className="w-24"
+                    />
+                    <span className="text-gray-500">to</span>
+                    <Input
+                      type="number"
+                      placeholder="Max"
+                      value={filters.priceRange[1]}
+                      onChange={(e) => setFilters(prev => ({ 
+                        ...prev, 
+                        priceRange: [prev.priceRange[0], Number(e.target.value)] 
+                      }))}
+                      className="w-24"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Status
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant={filters.isOpen ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setFilters(prev => ({ ...prev, isOpen: true }))}
+                    >
+                      Open Now
                     </Button>
-                    <Button variant="outline" fullWidth onClick={() => navigate(`/dashboard/restaurant/${id}/staff`)}>
-                      <Users className="w-4 h-4 mr-2" />
-                      Manage Staff
+                    <Button
+                      type="button"
+                      variant={!filters.isOpen ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setFilters(prev => ({ ...prev, isOpen: false }))}
+                    >
+                      Show All
                     </Button>
-                    <Button variant="outline" fullWidth onClick={() => navigate(`/dashboard/orders?restaurant=${id}`)}>
-                      <Package className="w-4 h-4 mr-2" />
-                      View Orders
-                    </Button>
-                    <Button variant="outline" fullWidth onClick={() => navigate(`/dashboard/analytics?restaurant=${id}`)}>
-                      <BarChart className="w-4 h-4 mr-2" />
-                      View Analytics
-                    </Button>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               </div>
             </div>
-          </TabsContent>
+          )}
+        </div>
 
-          <TabsContent value="menu">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Menu Management</CardTitle>
-                <Button onClick={() => navigate(`/dashboard/restaurant/${id}/menu`)}>
-                  <ChefHat className="w-4 h-4 mr-2" />
-                  Manage Full Menu
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <p>Full menu management page coming soon.</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
+        {/* Featured Restaurants */}
+        {featuredRestaurants.length > 0 && (
+          <div className="mb-12">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Featured Restaurants</h2>
+              <Link 
+                to="/restaurants?sortBy=rating" 
+                className="text-orange-500 hover:text-orange-600 font-medium flex items-center gap-2"
+              >
+                View All Top Rated
+                <ChevronRight className="w-4 h-4" />
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {featuredRestaurants.map(restaurant => (
+                <RestaurantCard 
+                  key={restaurant.restaurant_id} 
+                  restaurant={restaurant}
+                  showDeliveryTime
+                  showRating
+                  showCategories
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
-          <TabsContent value="staff">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Staff Management</CardTitle>
-                <Button onClick={() => navigate(`/dashboard/restaurant/${id}/staff`)}>
-                  <Users className="w-4 h-4 mr-2" />
-                  Manage Staff
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <p>Staff management page coming soon.</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
+        {/* All Restaurants */}
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">
+            {searchQuery ? `Results for "${searchQuery}"` : 'All Restaurants'}
+          </h2>
+          
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[...Array(6)].map((_, index) => (
+                <div key={index} className="bg-gray-200 animate-pulse h-80 rounded-2xl" />
+              ))}
+            </div>
+          ) : restaurants.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {allRestaurants.map(restaurant => (
+                <RestaurantCard 
+                  key={restaurant.restaurant_id} 
+                  restaurant={restaurant}
+                  showDeliveryTime
+                  showRating
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <ChefHat className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">No Restaurants Found</h3>
+              <p className="text-gray-600 mb-6">
+                {searchQuery 
+                  ? `No restaurants found for "${searchQuery}". Try a different search.`
+                  : 'No restaurants available at the moment.'}
+              </p>
+              <Button onClick={clearFilters}>
+                Clear Filters
+              </Button>
+            </div>
+          )}
+        </div>
 
-          <TabsContent value="orders">
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Orders</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p>Order management page coming soon.</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="analytics">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <TrendingUp className="w-5 h-5 mr-2" />
-                  Analytics
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p>Analytics dashboard coming soon.</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+        {/* Features */}
+        <div className="mt-16 bg-gray-50 rounded-3xl p-8">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Why Order With Us?</h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              We're committed to providing the best food delivery experience
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Truck className="w-8 h-8" />
+              </div>
+              <h3 className="font-bold text-gray-900 mb-2">Fast Delivery</h3>
+              <p className="text-gray-600 text-sm">Average delivery in 30-45 minutes</p>
+            </div>
+            
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <DollarSign className="w-8 h-8" />
+              </div>
+              <h3 className="font-bold text-gray-900 mb-2">Best Prices</h3>
+              <p className="text-gray-600 text-sm">Competitive prices and great offers</p>
+            </div>
+            
+            <div className="text-center">
+              <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Shield className="w-8 h-8" />
+              </div>
+              <h3 className="font-bold text-gray-900 mb-2">Safe & Secure</h3>
+              <p className="text-gray-600 text-sm">Secure payments and sanitized delivery</p>
+            </div>
+            
+            <div className="text-center">
+              <div className="w-16 h-16 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Star className="w-8 h-8" />
+              </div>
+              <h3 className="font-bold text-gray-900 mb-2">Top Quality</h3>
+              <p className="text-gray-600 text-sm">Fresh ingredients from trusted restaurants</p>
+            </div>
+          </div>
+        </div>
       </div>
     </Layout>
   );

@@ -1,16 +1,15 @@
+// src/redux/apis/authApi.ts
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { LoginRequest, LoginResponse, SignupRequest, User } from '../../types';
+import type { LoginRequest, LoginResponse, SignupRequest, User, ApiResponse } from '../../types';
+import { BACKEND_URL } from '../../utils/utils';
 
 export const authApi = createApi({
   reducerPath: 'authApi',
-  baseQuery: fetchBaseQuery({ 
-    // FIXED: Changed from full URL to relative path
-    baseUrl: import.meta.env.VITE_API_BASE_URL,
+  baseQuery: fetchBaseQuery({
+    baseUrl: BACKEND_URL,
     prepareHeaders: (headers) => {
       const token = localStorage.getItem('token');
-      if (token) {
-        headers.set('Authorization', `Bearer ${token}`);
-      }
+      if (token) headers.set('Authorization', `Bearer ${token}`);
       return headers;
     },
   }),
@@ -22,6 +21,10 @@ export const authApi = createApi({
         method: 'POST',
         body: credentials,
       }),
+      transformResponse: (res: ApiResponse<LoginResponse>) => {
+        if (!res.success) throw new Error(res.error || 'Login failed');
+        return res.data!;
+      },
       invalidatesTags: ['Auth'],
     }),
 
@@ -31,6 +34,10 @@ export const authApi = createApi({
         method: 'POST',
         body: userData,
       }),
+      transformResponse: (res: ApiResponse<LoginResponse>) => {
+        if (!res.success) throw new Error(res.error || 'Signup failed,your email may already be in use');
+        return res.data!;
+      },
       invalidatesTags: ['Auth'],
     }),
 
@@ -39,6 +46,9 @@ export const authApi = createApi({
         url: '/auth/signout',
         method: 'POST',
       }),
+      transformResponse: (res: ApiResponse<void>) => {
+        if (!res.success) throw new Error(res.error || 'Logout failed');
+      },
       invalidatesTags: ['Auth'],
     }),
 
@@ -46,14 +56,20 @@ export const authApi = createApi({
       query: (refreshToken) => ({
         url: '/auth/refresh',
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${refreshToken}`,
-        },
+        headers: { Authorization: `Bearer ${refreshToken}` },
       }),
+      transformResponse: (res: ApiResponse<{ accessToken: string; refreshToken: string }>) => {
+        if (!res.success) throw new Error(res.error || 'Token refresh failed');
+        return res.data!;
+      },
     }),
 
     getCurrentUser: builder.query<User, void>({
-      query: () => '/users/profile',
+      query: () => '/users/me',
+      transformResponse: (res: ApiResponse<User>) => {
+        if (!res.success) throw new Error(res.error || 'Failed to fetch current user');
+        return res.data!;
+      },
       providesTags: ['Auth'],
     }),
 
@@ -63,6 +79,10 @@ export const authApi = createApi({
         method: 'PATCH',
         body: userData,
       }),
+      transformResponse: (res: ApiResponse<User>) => {
+        if (!res.success) throw new Error(res.error || 'Failed to update profile');
+        return res.data!;
+      },
       invalidatesTags: ['Auth'],
     }),
   }),

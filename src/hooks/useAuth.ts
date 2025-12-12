@@ -1,136 +1,129 @@
-// src/hooks/useAuth.ts
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import toast from 'react-hot-toast';
 import { authService } from '../services/authService';
 import { CustomerService } from '../services/customerService';
-import toast from 'react-hot-toast';
+import type { User, Customer, SignupRequest, UserRole } from '../types';
+
+interface UserData {
+  name: string;
+  email: string;
+  password: string;
+  phone: string;
+  role?: UserRole;
+  address?: string;
+}
 
 export const useAuth = () => {
-  const [user, setUser] = useState<any>(null);
-  const [customer, setCustomer] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [customer, setCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const navigate = useNavigate();
 
-  // Initialize WebSocket on auth
+  // Initialize WebSocket when user is set - WITH ERROR HANDLING
   useEffect(() => {
     if (user) {
-      import('../services/websocketService').then(({ webSocketService }) => {
-        webSocketService.connect();
-      });
+      // Try to import WebSocket, but don't crash if it fails
+      import('../services/socketService')
+        .then(({ webSocketService }) => {
+          if (webSocketService && typeof webSocketService.connect === 'function') {
+            webSocketService.connect();
+          }
+        })
+        .catch((error) => {
+          console.warn('WebSocket service not available:', error);
+          // Don't throw error, just log warning
+        });
     }
   }, [user]);
 
-  const redirectBasedOnRole = (role: string) => {
-    console.log('Redirecting user with role:', role);
-    
-    switch(role) {
-      case 'restaurant_owner':
-      case 'manager':
-        window.location.href = '/dashboard/restaurant';
+  const redirectBasedOnRole = useCallback((role: UserRole) => {
+    switch (role) {
+      case 'restaurant_owner': 
+        navigate('/dashboard/restaurant'); 
         break;
-        
-      case 'rider':
-        window.location.href = '/dashboard/rider';
+      case 'manager': 
+        navigate('/dashboard/restaurant'); 
         break;
-        
-      case 'customer_care':
-        window.location.href = '/dashboard/admin';
+      case 'rider': 
+        navigate('/dashboard/rider'); 
         break;
-        
-      case 'super_admin':
-        window.location.href = '/dashboard/admin';
+      case 'customer_care': 
+        navigate('/dashboard/customer-care'); 
         break;
-        
-      case 'customer':
-      default:
-        window.location.href = '/dashboard';
+      case 'super_admin': 
+        navigate('/dashboard/admin'); 
+        break;
+      case 'customer': 
+        navigate('/dashboard/customer'); 
+        break;
+      default: 
+        navigate('/dashboard'); 
         break;
     }
-  };
+  }, [navigate]);
+
+  const handleCustomerData = useCallback(async (userData: User) => {
+    if (userData.role === 'customer') {
+      try {
+        const customerData = await CustomerService.getCustomerByUserId(userData.user_id);
+        setCustomer(customerData);
+        localStorage.setItem('customer', JSON.stringify(customerData));
+      } catch (err: any) {
+        console.log('Customer data not available yet, will create on first order.');
+        // Don't throw error, just log
+      }
+    }
+  }, []);
 
   const login = async (email: string, password: string) => {
     setLoading(true);
     try {
-      const response = await authService.login({ email, password });
+      const userData = await authService.login({ email, password });
+      setUser(userData);
       
-      const { accessToken, refreshToken, user: userData } = response;
-      
-      // Store tokens and user data
-      localStorage.setItem('token', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
+      // Store token and user
+      if (userData.accessToken) {
+        localStorage.setItem('token', userData.accessToken);
+      }
       localStorage.setItem('user', JSON.stringify(userData));
       localStorage.setItem('userRole', userData.role);
       
-      // Set user in state
-      setUser(userData);
-      
-      // Load customer data if user is a customer
-      if (userData.role === 'customer') {
-        try {
-          const customerData = await CustomerService.getCustomerByUserId(userData.user_id);
-          setCustomer(customerData);
-          localStorage.setItem('customer', JSON.stringify(customerData));
-        } catch (error) {
-          console.log('Customer data not found, will create on first order');
-        }
-      }
-      
+      await handleCustomerData(userData);
       toast.success('Logged in successfully!');
-      
-      // Redirect based on role
-      setTimeout(() => redirectBasedOnRole(userData.role), 100);
-      
+      redirectBasedOnRole(userData.role);
       return { success: true, user: userData };
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Login failed';
-      toast.error(message);
-      return { success: false, error: message };
+      const errorMessage = error?.message || error?.response?.data?.message || 'Login failed';
+      toast.error(errorMessage);
+      return { success: false, error: errorMessage };
     } finally {
       setLoading(false);
     }
   };
 
-  const signup = async (userData: any) => {
+  const signup = async (userData: UserData) => {
     setLoading(true);
     try {
-      const response = await authService.signup(userData);
+      const signupRequest: SignupRequest = { ...userData };
+      const newUser = await authService.signup(signupRequest);
+      setUser(newUser);
       
-      const { accessToken, refreshToken, user: newUser } = response;
-      
-      // Store tokens and user data
-      localStorage.setItem('token', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
+      if (newUser.accessToken) {
+        localStorage.setItem('token', newUser.accessToken);
+      }
       localStorage.setItem('user', JSON.stringify(newUser));
       localStorage.setItem('userRole', newUser.role);
       
-      // Set user in state
-      setUser(newUser);
-      
-      // Create customer record if role is customer
-      if (newUser.role === 'customer') {
-        try {
-          // This endpoint will be created in your backend
-          await api.post(`/customers/create/${newUser.user_id}`);
-          const customerData = await CustomerService.getCustomerByUserId(newUser.user_id);
-          setCustomer(customerData);
-          localStorage.setItem('customer', JSON.stringify(customerData));
-        } catch (error) {
-          console.log('Customer creation failed:', error);
-        }
-      }
-      
+      await handleCustomerData(newUser);
       toast.success('Account created successfully!');
-      
-      // Redirect based on role
-      setTimeout(() => redirectBasedOnRole(newUser.role), 100);
-      
+      redirectBasedOnRole(newUser.role);
       return { success: true, user: newUser };
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Signup failed';
-      toast.error(message);
-      return { success: false, error: message };
+      const errorMessage = error?.message || error?.response?.data?.message || 'Signup failed';
+      toast.error(errorMessage);
+      return { success: false, error: errorMessage };
     } finally {
       setLoading(false);
     }
@@ -142,90 +135,70 @@ export const useAuth = () => {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      // Clear local storage
-      localStorage.removeItem('token');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('user');
-      localStorage.removeItem('userRole');
-      localStorage.removeItem('customer');
-      
-      // Disconnect WebSocket
-      import('../services/websocketService').then(({ webSocketService }) => {
-        webSocketService.disconnect();
-      });
-      
+      localStorage.clear();
       setUser(null);
       setCustomer(null);
       
-      // Redirect to login
+      // Try to disconnect WebSocket if available
+      import('../services/socketService')
+        .then(({ webSocketService }) => {
+          if (webSocketService && typeof webSocketService.disconnect === 'function') {
+            webSocketService.disconnect();
+          }
+        })
+        .catch(() => {
+          // Ignore if WebSocket not available
+        });
+        
       navigate('/login');
       toast.success('Logged out successfully');
     }
   };
 
-  const checkAuth = async () => {
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
-    const customerStr = localStorage.getItem('customer');
-    
-    if (token && userStr) {
-      try {
-        const userData = JSON.parse(userStr);
-        setUser(userData);
-        
-        // Load customer data if exists
-        if (customerStr) {
-          const customerData = JSON.parse(customerStr);
-          setCustomer(customerData);
-        } else if (userData.role === 'customer') {
-          try {
-            const customerData = await CustomerService.getCustomerByUserId(userData.user_id);
-            setCustomer(customerData);
-            localStorage.setItem('customer', JSON.stringify(customerData));
-          } catch (error) {
-            console.log('Customer data not available');
-          }
-        }
-        
-        setAuthChecked(true);
-        return userData;
-      } catch (error) {
-        console.error('Error parsing user data:', error);
-        logout();
+  const checkAuth = useCallback(async (): Promise<User | null> => {
+    try {
+      const token = localStorage.getItem('token');
+      const storedUser = localStorage.getItem('user');
+      
+      if (!token || !storedUser) return null;
+      
+      const parsedUser: User = JSON.parse(storedUser);
+      setUser(parsedUser);
+      
+      const storedCustomer = localStorage.getItem('customer');
+      if (storedCustomer) {
+        setCustomer(JSON.parse(storedCustomer));
+      } else if (parsedUser.role === 'customer') {
+        await handleCustomerData(parsedUser);
       }
-    } else {
+      
+      return parsedUser;
+    } catch (err) {
+      console.error('Failed to check auth:', err);
+      // Don't auto-logout on error
+      return null;
+    } finally {
       setAuthChecked(true);
     }
-    return null;
-  };
+  }, [handleCustomerData]);
 
-  const refreshUserData = async () => {
-    if (user) {
-      try {
-        const freshUser = await authService.getCurrentUser();
-        setUser(freshUser);
-        localStorage.setItem('user', JSON.stringify(freshUser));
-        
-        if (freshUser.role === 'customer') {
-          try {
-            const customerData = await CustomerService.getCustomerByUserId(freshUser.user_id);
-            setCustomer(customerData);
-            localStorage.setItem('customer', JSON.stringify(customerData));
-          } catch (error) {
-            console.log('Failed to refresh customer data');
-          }
-        }
-        
-        return freshUser;
-      } catch (error) {
-        console.error('Failed to refresh user data:', error);
-      }
+  const refreshUserData = useCallback(async (): Promise<User | null> => {
+    if (!user) return null;
+    try {
+      const freshUser = await authService.getCurrentUser();
+      setUser(freshUser);
+      localStorage.setItem('user', JSON.stringify(freshUser));
+      await handleCustomerData(freshUser);
+      return freshUser;
+    } catch (err) {
+      console.error('Failed to refresh user data:', err);
+      return null;
     }
-  };
+  }, [user, handleCustomerData]);
 
   useEffect(() => {
     checkAuth();
-  }, []);
+  }, [checkAuth]);
 
   return {
     user,
@@ -235,13 +208,9 @@ export const useAuth = () => {
     login,
     signup,
     logout,
-    checkAuth,
     refreshUserData,
-    isAuthenticated: !!localStorage.getItem('token'),
-    hasRole: (roles: string[]) => {
-      if (!user) return false;
-      return roles.includes(user.role);
-    },
+    isAuthenticated: !!user,
+    hasRole: (roles: UserRole[]) => !!user && roles.includes(user.role),
     isCustomer: user?.role === 'customer',
     isRider: user?.role === 'rider',
     isRestaurantOwner: user?.role === 'restaurant_owner',
@@ -250,3 +219,5 @@ export const useAuth = () => {
     isAdmin: user?.role === 'super_admin',
   };
 };
+
+export default useAuth;
